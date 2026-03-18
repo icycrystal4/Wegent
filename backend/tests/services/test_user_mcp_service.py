@@ -13,9 +13,10 @@ from shared.utils.crypto import is_data_encrypted
 class TestUserMCPService:
     """Tests for user-scoped MCP preference storage."""
 
-    def test_set_dingtalk_service_config_encrypts_url(self):
-        preferences = user_mcp_service.set_dingtalk_service_config(
+    def test_set_provider_service_config_encrypts_url(self):
+        preferences = user_mcp_service.set_provider_service_config(
             None,
+            provider_id="dingtalk",
             service_id="docs",
             enabled=True,
             url="https://example.com/mcp?token=secret",
@@ -28,16 +29,17 @@ class TestUserMCPService:
         assert is_data_encrypted(stored_url) is True
         assert preferences["mcps"]["dingtalk"]["services"]["docs"]["enabled"] is True
 
-    def test_get_dingtalk_service_config_decrypts_url(self):
-        preferences = user_mcp_service.set_dingtalk_service_config(
+    def test_get_provider_service_config_decrypts_url(self):
+        preferences = user_mcp_service.set_provider_service_config(
             None,
+            provider_id="dingtalk",
             service_id="docs",
             enabled=True,
             url="https://example.com/mcp?token=secret",
         )
 
-        config = user_mcp_service.get_dingtalk_service_config(
-            json.dumps(preferences), "docs"
+        config = user_mcp_service.get_provider_service_config(
+            json.dumps(preferences), "dingtalk", "docs"
         )
 
         assert config == {
@@ -45,15 +47,16 @@ class TestUserMCPService:
             "url": "https://example.com/mcp?token=secret",
         }
 
-    def test_list_dingtalk_mcp_servers_returns_enabled_services_only(self):
-        preferences = user_mcp_service.set_dingtalk_service_config(
+    def test_list_mcp_servers_returns_enabled_services_only(self):
+        preferences = user_mcp_service.set_provider_service_config(
             None,
+            provider_id="dingtalk",
             service_id="docs",
             enabled=True,
             url="https://example.com/mcp?token=secret",
         )
 
-        servers = user_mcp_service.list_dingtalk_mcp_servers(preferences)
+        servers = user_mcp_service.list_mcp_servers(preferences)
 
         assert servers == [
             {

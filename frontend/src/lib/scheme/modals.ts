@@ -14,13 +14,35 @@ import type { SchemeHandlerContext } from './types'
  * This should be called once during app initialization
  */
 export function initializeModalMappings(): void {
+  registerScheme('modal-mcp-provider-config', {
+    pattern: 'wegent://modal/mcp-provider-config',
+    handler: (context: SchemeHandlerContext) => {
+      const event = new CustomEvent('wegent:open-dialog', {
+        detail: {
+          type: 'mcp-provider-config',
+          params: context.parsed.params,
+        },
+      })
+      window.dispatchEvent(event)
+    },
+    requireAuth: true,
+    description: 'Open MCP provider configuration dialog',
+    examples: [
+      'wegent://modal/mcp-provider-config?provider=dingtalk&service=docs',
+      'wegent://modal/mcp-provider-config?provider=dingtalk&service=sheets',
+    ],
+  })
+
   registerScheme('modal-dingtalk-mcp-config', {
     pattern: 'wegent://modal/dingtalk-mcp-config',
     handler: (context: SchemeHandlerContext) => {
       const event = new CustomEvent('wegent:open-dialog', {
         detail: {
-          type: 'dingtalk-mcp-config',
-          params: context.parsed.params,
+          type: 'mcp-provider-config',
+          params: {
+            provider: 'dingtalk',
+            ...context.parsed.params,
+          },
         },
       })
       window.dispatchEvent(event)

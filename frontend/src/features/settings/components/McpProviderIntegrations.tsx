@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react'
 import { ExternalLink, Loader2 } from 'lucide-react'
 
-import { userApis, type DingTalkMcpServiceConfig } from '@/apis/user'
+import { userApis, type McpProviderServiceConfig } from '@/apis/user'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,17 +15,19 @@ import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 import { useTranslation } from '@/hooks/useTranslation'
 
-type EditableService = DingTalkMcpServiceConfig & {
+type EditableService = McpProviderServiceConfig & {
   draftUrl: string
 }
 
-function DingTalkServiceCard({
+function McpProviderServiceCard({
+  providerId,
   service,
   loading,
   onToggle,
   onUrlChange,
   onSave,
 }: {
+  providerId: string
   service: EditableService
   loading: boolean
   onToggle: (serviceId: string, enabled: boolean) => void
@@ -33,7 +35,7 @@ function DingTalkServiceCard({
   onSave: (serviceId: string) => void
 }) {
   const { t } = useTranslation('common')
-  const baseKey = `dingtalk.services.${service.service_id}`
+  const baseKey = `${providerId}.services.${service.service_id}`
 
   return (
     <div className="space-y-3 rounded-md border border-border bg-base p-4">
@@ -44,32 +46,37 @@ function DingTalkServiceCard({
 
       <div className="flex items-center justify-between rounded-md border border-border/70 bg-surface px-3 py-2.5">
         <div className="space-y-0.5 pr-4">
-          <Label htmlFor={`dingtalk-${service.service_id}-enabled`} className="text-sm font-medium">
+          <Label
+            htmlFor={`${providerId}-${service.service_id}-enabled`}
+            className="text-sm font-medium"
+          >
             {t(`${baseKey}.enable_label`)}
           </Label>
           <p className="text-xs text-text-muted">{t(`${baseKey}.enable_hint`)}</p>
         </div>
         <Switch
-          id={`dingtalk-${service.service_id}-enabled`}
+          id={`${providerId}-${service.service_id}-enabled`}
           checked={service.enabled}
           onCheckedChange={checked => onToggle(service.service_id, checked)}
           disabled={loading}
-          data-testid={`toggle-dingtalk-${service.service_id}-switch`}
+          data-testid={`toggle-${providerId}-${service.service_id}-switch`}
         />
       </div>
 
       {service.enabled && (
         <div className="space-y-1.5">
-          <Label htmlFor={`dingtalk-${service.service_id}-url`}>{t('dingtalk.url_label')}</Label>
+          <Label htmlFor={`${providerId}-${service.service_id}-url`}>
+            {t(`${providerId}.url_label`)}
+          </Label>
           <Input
-            id={`dingtalk-${service.service_id}-url`}
+            id={`${providerId}-${service.service_id}-url`}
             value={service.draftUrl}
             onChange={event => onUrlChange(service.service_id, event.target.value)}
-            placeholder={t('dingtalk.url_placeholder')}
+            placeholder={t(`${providerId}.url_placeholder`)}
             disabled={loading}
-            data-testid={`dingtalk-${service.service_id}-url-input`}
+            data-testid={`${providerId}-${service.service_id}-url-input`}
           />
-          <p className="text-xs text-text-muted">{t('dingtalk.url_hint')}</p>
+          <p className="text-xs text-text-muted">{t(`${providerId}.url_hint`)}</p>
         </div>
       )}
 
@@ -79,25 +86,25 @@ function DingTalkServiceCard({
           type="button"
           onClick={() => window.open(service.detail_url, '_blank', 'noopener,noreferrer')}
           disabled={loading}
-          data-testid={`open-dingtalk-${service.service_id}-link-button`}
+          data-testid={`open-${providerId}-${service.service_id}-link-button`}
         >
           <ExternalLink className="mr-2 h-4 w-4" />
-          {t('dingtalk.open_link')}
+          {t(`${providerId}.open_link`)}
         </Button>
         <Button
           variant="primary"
           type="button"
           onClick={() => onSave(service.service_id)}
           disabled={loading || (service.enabled && !service.draftUrl.trim())}
-          data-testid={`save-dingtalk-${service.service_id}-button`}
+          data-testid={`save-${providerId}-${service.service_id}-button`}
         >
           {loading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {t('dingtalk.saving')}
+              {t(`${providerId}.saving`)}
             </>
           ) : (
-            t('dingtalk.save')
+            t(`${providerId}.save`)
           )}
         </Button>
       </div>
@@ -105,7 +112,7 @@ function DingTalkServiceCard({
   )
 }
 
-export default function DingTalkIntegrations() {
+export default function McpProviderIntegrations({ providerId }: { providerId: string }) {
   const { t } = useTranslation('common')
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -116,12 +123,12 @@ export default function DingTalkIntegrations() {
     const loadServices = async () => {
       try {
         setLoading(true)
-        const configs = await userApis.getDingTalkMcpServices()
+        const configs = await userApis.getMcpProviderServices(providerId)
         setServices(configs.map(service => ({ ...service, draftUrl: service.url })))
       } catch {
         toast({
           variant: 'destructive',
-          title: t('dingtalk.load_failed'),
+          title: t(`${providerId}.load_failed`),
         })
       } finally {
         setLoading(false)
@@ -129,7 +136,7 @@ export default function DingTalkIntegrations() {
     }
 
     loadServices()
-  }, [toast, t])
+  }, [providerId, toast, t])
 
   const updateServiceState = (
     serviceId: string,
@@ -154,19 +161,20 @@ export default function DingTalkIntegrations() {
 
     try {
       setSavingServiceId(serviceId)
-      const saved = await userApis.updateDingTalkMcpService(serviceId, {
+      const saved = await userApis.updateMcpProviderService(providerId, serviceId, {
         enabled: current.enabled,
         url: current.draftUrl,
       })
 
       updateServiceState(serviceId, () => ({ ...saved, draftUrl: saved.url }))
       toast({
-        title: t(`dingtalk.services.${serviceId}.save_success`),
+        title: t(`${providerId}.services.${serviceId}.save_success`),
       })
     } catch (error) {
       toast({
         variant: 'destructive',
-        title: (error as Error)?.message || t(`dingtalk.services.${serviceId}.save_failed`),
+        title:
+          (error as Error)?.message || t(`${providerId}.services.${serviceId}.save_failed`),
       })
     } finally {
       setSavingServiceId(null)
@@ -177,7 +185,7 @@ export default function DingTalkIntegrations() {
     return (
       <div className="flex items-center gap-2 rounded-md border border-border bg-base p-4 text-sm text-text-muted">
         <Loader2 className="h-4 w-4 animate-spin" />
-        {t('dingtalk.loading')}
+        {t(`${providerId}.loading`)}
       </div>
     )
   }
@@ -185,8 +193,9 @@ export default function DingTalkIntegrations() {
   return (
     <div className="space-y-6">
       {services.map(service => (
-        <DingTalkServiceCard
+        <McpProviderServiceCard
           key={service.service_id}
+          providerId={providerId}
           service={service}
           loading={savingServiceId === service.service_id}
           onToggle={handleToggle}

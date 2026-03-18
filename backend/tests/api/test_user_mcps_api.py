@@ -38,14 +38,14 @@ def user_mcps_client(test_db: Session, test_user: User) -> TestClient:
 class TestUserMcpsAPI:
     """Tests for user MCP configuration endpoints."""
 
-    def test_update_and_get_dingtalk_service_config(
+    def test_update_and_get_provider_service_config(
         self,
         user_mcps_client: TestClient,
         test_db: Session,
         test_user: User,
     ):
         response = user_mcps_client.put(
-            "/api/users/me/mcps/dingtalk/services/docs",
+            "/api/users/me/mcps/providers/dingtalk/services/docs",
             json={
                 "enabled": True,
                 "url": "https://example.com/mcp?token=secret",
@@ -54,6 +54,7 @@ class TestUserMcpsAPI:
 
         assert response.status_code == 200
         assert response.json() == {
+            "provider_id": "dingtalk",
             "service_id": "docs",
             "server_name": "dingtalk_docs",
             "detail_url": "https://mcp.dingtalk.com/#/detail?mcpId=9629",
@@ -69,11 +70,12 @@ class TestUserMcpsAPI:
         assert is_data_encrypted(stored_url) is True
 
         get_response = user_mcps_client.get(
-            "/api/users/me/mcps/dingtalk/services/docs",
+            "/api/users/me/mcps/providers/dingtalk/services/docs",
         )
 
         assert get_response.status_code == 200
         assert get_response.json() == {
+            "provider_id": "dingtalk",
             "service_id": "docs",
             "server_name": "dingtalk_docs",
             "detail_url": "https://mcp.dingtalk.com/#/detail?mcpId=9629",
@@ -81,14 +83,17 @@ class TestUserMcpsAPI:
             "url": "https://example.com/mcp?token=secret",
         }
 
-    def test_list_dingtalk_services_returns_registry_and_config(
+    def test_list_provider_services_returns_registry_and_config(
         self, user_mcps_client: TestClient
     ):
-        response = user_mcps_client.get("/api/users/me/mcps/dingtalk/services")
+        response = user_mcps_client.get(
+            "/api/users/me/mcps/providers/dingtalk/services"
+        )
 
         assert response.status_code == 200
         assert response.json() == [
             {
+                "provider_id": "dingtalk",
                 "service_id": "docs",
                 "server_name": "dingtalk_docs",
                 "detail_url": "https://mcp.dingtalk.com/#/detail?mcpId=9629",
@@ -96,19 +101,20 @@ class TestUserMcpsAPI:
                 "url": "",
             },
             {
+                "provider_id": "dingtalk",
                 "service_id": "sheets",
                 "server_name": "dingtalk_sheets",
                 "detail_url": "https://mcp.dingtalk.com/#/detail?mcpId=9555",
                 "enabled": False,
                 "url": "",
-            }
+            },
         ]
 
-    def test_enable_dingtalk_service_without_url_fails(
+    def test_enable_provider_service_without_url_fails(
         self, user_mcps_client: TestClient
     ):
         response = user_mcps_client.put(
-            "/api/users/me/mcps/dingtalk/services/docs",
+            "/api/users/me/mcps/providers/dingtalk/services/docs",
             json={"enabled": True, "url": ""},
         )
 

@@ -21,19 +21,12 @@ from app.core.config import settings
 from app.models.subtask import Subtask
 from app.models.task import TaskResource
 from app.schemas.kind import Bot, Ghost, Shell, Team
+from app.services.mcp_provider_registry import list_mcp_providers
 from app.services.user_mcp_service import user_mcp_service
 from shared.models import ExecutionRequest
 from shared.models.db import Kind, User
 
 logger = logging.getLogger(__name__)
-
-DINGTALK_CONFIG_GUIDE_SKILL = "dingtalk-config-guide"
-DINGTALK_CONFIG_GUIDE_SKILL_REF = {
-    "name": DINGTALK_CONFIG_GUIDE_SKILL,
-    "namespace": "default",
-    "is_public": True,
-}
-DINGTALK_MESSAGE_KEYWORDS = ("钉钉", "dingtalk")
 
 
 class TaskRequestBuilder:
@@ -186,7 +179,7 @@ class TaskRequestBuilder:
         # Get skills for the bot (full resolution from Ghost)
         # Convert preload_skills to the format expected by _get_bot_skills
         effective_preload_skills = list(preload_skills or [])
-        effective_preload_skills = self._inject_conditional_dingtalk_skills(
+        effective_preload_skills = self._inject_conditional_provider_skills(
             user=user,
             message=message,
             preload_skills=effective_preload_skills,
@@ -1434,7 +1427,7 @@ class TaskRequestBuilder:
     @staticmethod
     def _load_user_mcp_servers(user: User) -> list[dict[str, Any]]:
         """Load user-scoped MCP servers from preferences."""
-        return user_mcp_service.list_dingtalk_mcp_servers(user.preferences)
+        return user_mcp_service.list_mcp_servers(user.preferences)
 
     @staticmethod
     def _extract_prompt_text(message: Union[str, list]) -> str:
@@ -1456,29 +1449,17 @@ class TaskRequestBuilder:
 
         return "\n".join(text_parts)
 
-    def _inject_conditional_dingtalk_skills(
+    def _inject_conditional_provider_skills(
         self,
         *,
         user: User,
         message: Union[str, list],
         preload_skills: list,
     ) -> list:
-        """Preload DingTalk config guidance skill when relevant and needed."""
+        """Preload provider config guidance skills when relevant and needed."""
         merged_preload_skills = list(preload_skills)
         prompt_text = self._extract_prompt_text(message).strip().lower()
-        if not prompt_text or not any(
-            keyword in prompt_text for keyword in DINGTALK_MESSAGE_KEYWORDS
-        ):
-            return merged_preload_skills
-
-        service_configs = user_mcp_service.list_dingtalk_service_configs(
-            user.preferences
-        )
-        all_services_ready = all(
-            service.get("enabled") and (service.get("url") or "").strip()
-            for service in service_configs
-        )
-        if all_services_ready:
+        if not prompt_text:
             return merged_preload_skills
 
         existing_names = {
@@ -1486,8 +1467,32 @@ class TaskRequestBuilder:
             for skill in merged_preload_skills
             if isinstance(skill, (str, dict))
         }
-        if DINGTALK_CONFIG_GUIDE_SKILL not in existing_names:
-            merged_preload_skills.append(dict(DINGTALK_CONFIG_GUIDE_SKILL_REF))
+
+        for provider in list_mcp_providers():
+            keywords = provider.get("message_keywords") or ()
+            if not keywords or not any(keyword in prompt_text for keyword in keywords):
+                continue
+
+            service_configs = user_mcp_service.list_provider_service_configs(
+                user.preferences, provider["provider_id"]
+            )
+            all_services_ready = all(
+                service.get("enabled") and (service.get("url") or "").strip()
+                for service in service_configs
+            )
+            if all_services_ready:
+                continue
+
+            guidance_skill = provider.get("guidance_skill")
+            if guidance_skill and guidance_skill not in existing_names:
+                merged_preload_skills.append(
+                    {
+                        "name": guidance_skill,
+                        "namespace": "default",
+                        "is_public": True,
+                    }
+                )
+                existing_names.add(guidance_skill)
 
         return merged_preload_skills
 

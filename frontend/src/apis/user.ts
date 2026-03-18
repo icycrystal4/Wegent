@@ -53,7 +53,8 @@ export interface FeatureFlags {
   memory_enabled: boolean
 }
 
-export interface DingTalkMcpServiceConfig {
+export interface McpProviderServiceConfig {
+  provider_id: string
   service_id: string
   server_name: string
   detail_url: string
@@ -191,19 +192,28 @@ export const userApis = {
     return apiClient.get(`/users/search?q=${encodeURIComponent(query)}`)
   },
 
-  async getDingTalkMcpServices(): Promise<DingTalkMcpServiceConfig[]> {
-    return apiClient.get('/users/me/mcps/dingtalk/services')
+  async getMcpProviderServices(providerId: string): Promise<McpProviderServiceConfig[]> {
+    return apiClient.get(`/users/me/mcps/providers/${encodeURIComponent(providerId)}/services`)
   },
 
-  async getDingTalkMcpService(serviceId: string): Promise<DingTalkMcpServiceConfig> {
-    return apiClient.get(`/users/me/mcps/dingtalk/services/${encodeURIComponent(serviceId)}`)
+  async getMcpProviderService(
+    providerId: string,
+    serviceId: string
+  ): Promise<McpProviderServiceConfig> {
+    return apiClient.get(
+      `/users/me/mcps/providers/${encodeURIComponent(providerId)}/services/${encodeURIComponent(serviceId)}`
+    )
   },
 
-  async updateDingTalkMcpService(
+  async updateMcpProviderService(
+    providerId: string,
     serviceId: string,
-    data: Pick<DingTalkMcpServiceConfig, 'enabled' | 'url'>
-  ): Promise<DingTalkMcpServiceConfig> {
-    return apiClient.put(`/users/me/mcps/dingtalk/services/${encodeURIComponent(serviceId)}`, data)
+    data: Pick<McpProviderServiceConfig, 'enabled' | 'url'>
+  ): Promise<McpProviderServiceConfig> {
+    return apiClient.put(
+      `/users/me/mcps/providers/${encodeURIComponent(providerId)}/services/${encodeURIComponent(serviceId)}`,
+      data
+    )
   },
 
   /**

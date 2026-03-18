@@ -13,12 +13,14 @@ from app.services.user_mcp_service import user_mcp_service
 class TestUserScopedMcpInjection:
     """Tests for DingTalk Docs MCP injection."""
 
-    def test_load_user_mcp_servers_returns_dingtalk_server_when_enabled(self):
+    def test_load_user_mcp_servers_returns_provider_server_when_enabled(self):
         preferences = user_mcp_service.dump_preferences(
-            user_mcp_service.set_dingtalk_docs_config(
+            user_mcp_service.set_provider_service_config(
                 None,
+                provider_id="dingtalk",
+                service_id="docs",
                 enabled=True,
-                docs_url="https://example.com/mcp?token=secret",
+                url="https://example.com/mcp?token=secret",
             )
         )
         user = SimpleNamespace(preferences=preferences)
@@ -53,13 +55,13 @@ class TestUserScopedMcpInjection:
         assert bot_config_list[0]["mcp_servers"] == user_mcp_servers
         assert bot_config_list[1]["mcp_servers"] == []
 
-    def test_injects_dingtalk_config_skill_when_message_mentions_dingtalk_and_service_missing(
+    def test_injects_provider_config_skill_when_message_mentions_provider_and_service_missing(
         self, test_db
     ):
         builder = TaskRequestBuilder(test_db)
         user = SimpleNamespace(preferences="{}")
 
-        preload_skills = builder._inject_conditional_dingtalk_skills(
+        preload_skills = builder._inject_conditional_provider_skills(
             user=user,
             message="看看我的钉钉文档",
             preload_skills=[],
@@ -73,18 +75,20 @@ class TestUserScopedMcpInjection:
             }
         ]
 
-    def test_skips_dingtalk_config_skill_when_all_registered_services_are_ready(
+    def test_skips_provider_config_skill_when_all_registered_services_are_ready(
         self, test_db
     ):
         builder = TaskRequestBuilder(test_db)
         preferences = user_mcp_service.dump_preferences(
-            user_mcp_service.set_dingtalk_service_config(
-                user_mcp_service.set_dingtalk_service_config(
+            user_mcp_service.set_provider_service_config(
+                user_mcp_service.set_provider_service_config(
                     None,
+                    provider_id="dingtalk",
                     service_id="docs",
                     enabled=True,
                     url="https://example.com/docs?token=secret",
                 ),
+                provider_id="dingtalk",
                 service_id="sheets",
                 enabled=True,
                 url="https://example.com/sheets?token=secret",
@@ -92,7 +96,7 @@ class TestUserScopedMcpInjection:
         )
         user = SimpleNamespace(preferences=preferences)
 
-        preload_skills = builder._inject_conditional_dingtalk_skills(
+        preload_skills = builder._inject_conditional_provider_skills(
             user=user,
             message="帮我看一下钉钉表格",
             preload_skills=[],

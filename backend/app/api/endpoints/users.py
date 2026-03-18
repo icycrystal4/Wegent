@@ -23,12 +23,15 @@ from app.schemas.admin import (
 from app.schemas.subscription import NotificationChannelInfo
 from app.schemas.user import UserCreate, UserInDB, UserUpdate
 from app.services.kind import kind_service
-from app.services.dingtalk_registry import get_dingtalk_service
+from app.services.mcp_provider_registry import (
+    get_mcp_provider,
+    get_mcp_provider_service,
+)
 from app.services.subscription.notification_service import (
     subscription_notification_service,
 )
-from app.services.user_mcp_service import user_mcp_service
 from app.services.user import user_service
+from app.services.user_mcp_service import user_mcp_service
 
 router = APIRouter()
 
@@ -42,16 +45,17 @@ class FeatureFlags(BaseModel):
     memory_enabled: bool = False  # Whether long-term memory service is available
 
 
-class DingTalkMCPServiceConfigRequest(BaseModel):
-    """User-scoped DingTalk MCP service configuration."""
+class MCPProviderServiceConfigRequest(BaseModel):
+    """User-scoped MCP provider service configuration."""
 
     enabled: bool = False
     url: str = ""
 
 
-class DingTalkMCPServiceConfigResponse(BaseModel):
-    """Response model for a DingTalk MCP service configuration."""
+class MCPProviderServiceConfigResponse(BaseModel):
+    """Response model for an MCP provider service configuration."""
 
+    provider_id: str
     service_id: str
     server_name: str
     detail_url: str
@@ -137,69 +141,86 @@ async def update_current_user_endpoint(
 
 
 @router.get(
-    "/me/mcps/dingtalk/services", response_model=list[DingTalkMCPServiceConfigResponse]
+    "/me/mcps/providers/{provider_id}/services",
+    response_model=list[MCPProviderServiceConfigResponse],
 )
-async def list_dingtalk_mcp_services(
+async def list_mcp_provider_services(
+    provider_id: str,
     current_user: User = Depends(security.get_current_user),
 ):
-    """List DingTalk MCP services merged with the current user's configuration."""
+    """List MCP provider services merged with the current user's configuration."""
+    provider = get_mcp_provider(provider_id)
+    if not provider:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unsupported MCP provider: {provider_id}",
+        )
+
     return [
-        DingTalkMCPServiceConfigResponse(**service)
-        for service in user_mcp_service.list_dingtalk_service_configs(
-            current_user.preferences
+        MCPProviderServiceConfigResponse(**service)
+        for service in user_mcp_service.list_provider_service_configs(
+            current_user.preferences, provider_id
         )
     ]
 
 
 @router.get(
-    "/me/mcps/dingtalk/services/{service_id}",
-    response_model=DingTalkMCPServiceConfigResponse,
+    "/me/mcps/providers/{provider_id}/services/{service_id}",
+    response_model=MCPProviderServiceConfigResponse,
 )
-async def get_dingtalk_mcp_service_config(
+async def get_mcp_provider_service_config(
+    provider_id: str,
     service_id: str,
     current_user: User = Depends(security.get_current_user),
 ):
-    """Get the current user's DingTalk MCP service configuration."""
-    service = get_dingtalk_service(service_id)
+    """Get the current user's MCP provider service configuration."""
+    service = get_mcp_provider_service(provider_id, service_id)
     if not service:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unsupported DingTalk service: {service_id}",
+            detail=f"Unsupported MCP provider service: {provider_id}/{service_id}",
         )
 
-    config = user_mcp_service.get_dingtalk_service_config(
-        current_user.preferences, service_id
+    config = user_mcp_service.get_provider_service_config(
+        current_user.preferences, provider_id, service_id
     )
-    return DingTalkMCPServiceConfigResponse(**service, **config)
+    return MCPProviderServiceConfigResponse(
+        provider_id=provider_id, **service, **config
+    )
 
 
 @router.put(
-    "/me/mcps/dingtalk/services/{service_id}",
-    response_model=DingTalkMCPServiceConfigResponse,
+    "/me/mcps/providers/{provider_id}/services/{service_id}",
+    response_model=MCPProviderServiceConfigResponse,
 )
-async def update_dingtalk_mcp_service_config(
+async def update_mcp_provider_service_config(
+    provider_id: str,
     service_id: str,
-    config: DingTalkMCPServiceConfigRequest,
+    config: MCPProviderServiceConfigRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Update the current user's DingTalk MCP service configuration."""
-    service = get_dingtalk_service(service_id)
+    """Update the current user's MCP provider service configuration."""
+    service = get_mcp_provider_service(provider_id, service_id)
     if not service:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unsupported DingTalk service: {service_id}",
+            detail=f"Unsupported MCP provider service: {provider_id}/{service_id}",
         )
 
     url = config.url.strip()
     if config.enabled and not url:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"url is required when DingTalk MCP service '{service_id}' is enabled",
+            detail=(
+                "url is required when MCP provider service "
+                f"'{provider_id}/{service_id}' is enabled"
+            ),
         )
 
-    updated_preferences = user_mcp_service.set_dingtalk_service_config(
+    updated_preferences = user_mcp_service.set_provider_service_config(
         current_user.preferences,
+        provider_id=provider_id,
         service_id=service_id,
         enabled=config.enabled,
         url=url,
@@ -210,10 +231,12 @@ async def update_dingtalk_mcp_service_config(
     db.commit()
     db.refresh(current_user)
 
-    updated_config = user_mcp_service.get_dingtalk_service_config(
-        current_user.preferences, service_id
+    updated_config = user_mcp_service.get_provider_service_config(
+        current_user.preferences, provider_id, service_id
     )
-    return DingTalkMCPServiceConfigResponse(**service, **updated_config)
+    return MCPProviderServiceConfigResponse(
+        provider_id=provider_id, **service, **updated_config
+    )
 
 
 @router.delete("/me/git-token/{git_domain:path}", response_model=UserInDB)

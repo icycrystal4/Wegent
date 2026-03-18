@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import { paths } from '@/config/paths'
 import { taskApis } from '@/apis/tasks'
-import { DingTalkMcpConfigDialog } from '@/features/settings/components/DingTalkMcpConfigDialog'
+import { McpProviderConfigDialog } from '@/features/settings/components/McpProviderConfigDialog'
 
 type OpenDialogDetail = {
   type?: string
@@ -28,8 +28,9 @@ type OpenDialogDetail = {
 export default function SchemeURLDialogBridge() {
   const router = useRouter()
   const { toast } = useToast()
-  const [isDingTalkConfigOpen, setIsDingTalkConfigOpen] = useState(false)
-  const [dingtalkServiceId, setDingtalkServiceId] = useState<string>('docs')
+  const [isMcpProviderConfigOpen, setIsMcpProviderConfigOpen] = useState(false)
+  const [mcpProviderId, setMcpProviderId] = useState<string>('dingtalk')
+  const [mcpProviderServiceId, setMcpProviderServiceId] = useState<string>('docs')
 
   const handleOpenDialog = useCallback(
     (e: Event) => {
@@ -92,11 +93,14 @@ export default function SchemeURLDialogBridge() {
         return
       }
 
-      if (dialogType === 'dingtalk-mcp-config') {
+      if (dialogType === 'mcp-provider-config') {
+        const providerParam = params.provider
         const serviceParam = params.service
+        const providerId = Array.isArray(providerParam) ? providerParam[0] : providerParam
         const serviceId = Array.isArray(serviceParam) ? serviceParam[0] : serviceParam
-        setDingtalkServiceId(typeof serviceId === 'string' && serviceId ? serviceId : 'docs')
-        setIsDingTalkConfigOpen(true)
+        setMcpProviderId(typeof providerId === 'string' && providerId ? providerId : 'dingtalk')
+        setMcpProviderServiceId(typeof serviceId === 'string' && serviceId ? serviceId : 'docs')
+        setIsMcpProviderConfigOpen(true)
         return
       }
 
@@ -265,10 +269,11 @@ export default function SchemeURLDialogBridge() {
   }, [handleOpenDialog, handleExportEvent])
 
   return (
-    <DingTalkMcpConfigDialog
-      open={isDingTalkConfigOpen}
-      onOpenChange={setIsDingTalkConfigOpen}
-      serviceId={dingtalkServiceId}
+    <McpProviderConfigDialog
+      open={isMcpProviderConfigOpen}
+      onOpenChange={setIsMcpProviderConfigOpen}
+      providerId={mcpProviderId}
+      serviceId={mcpProviderServiceId}
     />
   )
 }
