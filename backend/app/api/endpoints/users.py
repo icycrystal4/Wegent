@@ -23,9 +23,11 @@ from app.schemas.admin import (
 from app.schemas.subscription import NotificationChannelInfo
 from app.schemas.user import UserCreate, UserInDB, UserUpdate
 from app.services.kind import kind_service
+from app.services.dingtalk_registry import get_dingtalk_service
 from app.services.subscription.notification_service import (
     subscription_notification_service,
 )
+from app.services.user_mcp_service import user_mcp_service
 from app.services.user import user_service
 
 router = APIRouter()
@@ -38,6 +40,23 @@ class FeatureFlags(BaseModel):
     """System-level feature flags for the frontend"""
 
     memory_enabled: bool = False  # Whether long-term memory service is available
+
+
+class DingTalkMCPServiceConfigRequest(BaseModel):
+    """User-scoped DingTalk MCP service configuration."""
+
+    enabled: bool = False
+    url: str = ""
+
+
+class DingTalkMCPServiceConfigResponse(BaseModel):
+    """Response model for a DingTalk MCP service configuration."""
+
+    service_id: str
+    server_name: str
+    detail_url: str
+    enabled: bool = False
+    url: str = ""
 
 
 @router.get("/features", response_model=FeatureFlags)
@@ -115,6 +134,86 @@ async def update_current_user_endpoint(
         return user
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get(
+    "/me/mcps/dingtalk/services", response_model=list[DingTalkMCPServiceConfigResponse]
+)
+async def list_dingtalk_mcp_services(
+    current_user: User = Depends(security.get_current_user),
+):
+    """List DingTalk MCP services merged with the current user's configuration."""
+    return [
+        DingTalkMCPServiceConfigResponse(**service)
+        for service in user_mcp_service.list_dingtalk_service_configs(
+            current_user.preferences
+        )
+    ]
+
+
+@router.get(
+    "/me/mcps/dingtalk/services/{service_id}",
+    response_model=DingTalkMCPServiceConfigResponse,
+)
+async def get_dingtalk_mcp_service_config(
+    service_id: str,
+    current_user: User = Depends(security.get_current_user),
+):
+    """Get the current user's DingTalk MCP service configuration."""
+    service = get_dingtalk_service(service_id)
+    if not service:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unsupported DingTalk service: {service_id}",
+        )
+
+    config = user_mcp_service.get_dingtalk_service_config(
+        current_user.preferences, service_id
+    )
+    return DingTalkMCPServiceConfigResponse(**service, **config)
+
+
+@router.put(
+    "/me/mcps/dingtalk/services/{service_id}",
+    response_model=DingTalkMCPServiceConfigResponse,
+)
+async def update_dingtalk_mcp_service_config(
+    service_id: str,
+    config: DingTalkMCPServiceConfigRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Update the current user's DingTalk MCP service configuration."""
+    service = get_dingtalk_service(service_id)
+    if not service:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unsupported DingTalk service: {service_id}",
+        )
+
+    url = config.url.strip()
+    if config.enabled and not url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"url is required when DingTalk MCP service '{service_id}' is enabled",
+        )
+
+    updated_preferences = user_mcp_service.set_dingtalk_service_config(
+        current_user.preferences,
+        service_id=service_id,
+        enabled=config.enabled,
+        url=url,
+    )
+    current_user.preferences = user_mcp_service.dump_preferences(updated_preferences)
+
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+
+    updated_config = user_mcp_service.get_dingtalk_service_config(
+        current_user.preferences, service_id
+    )
+    return DingTalkMCPServiceConfigResponse(**service, **updated_config)
 
 
 @router.delete("/me/git-token/{git_domain:path}", response_model=UserInDB)

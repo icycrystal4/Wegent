@@ -53,6 +53,14 @@ export interface FeatureFlags {
   memory_enabled: boolean
 }
 
+export interface DingTalkMcpServiceConfig {
+  service_id: string
+  server_name: string
+  detail_url: string
+  enabled: boolean
+  url: string
+}
+
 const TOKEN_KEY = 'auth_token'
 const TOKEN_EXPIRE_KEY = 'auth_token_expire'
 const TOKEN_COOKIE_NAME = 'auth_token'
@@ -181,6 +189,21 @@ export const userApis = {
 
   async searchUsers(query: string): Promise<SearchUsersResponse> {
     return apiClient.get(`/users/search?q=${encodeURIComponent(query)}`)
+  },
+
+  async getDingTalkMcpServices(): Promise<DingTalkMcpServiceConfig[]> {
+    return apiClient.get('/users/me/mcps/dingtalk/services')
+  },
+
+  async getDingTalkMcpService(serviceId: string): Promise<DingTalkMcpServiceConfig> {
+    return apiClient.get(`/users/me/mcps/dingtalk/services/${encodeURIComponent(serviceId)}`)
+  },
+
+  async updateDingTalkMcpService(
+    serviceId: string,
+    data: Pick<DingTalkMcpServiceConfig, 'enabled' | 'url'>
+  ): Promise<DingTalkMcpServiceConfig> {
+    return apiClient.put(`/users/me/mcps/dingtalk/services/${encodeURIComponent(serviceId)}`, data)
   },
 
   /**

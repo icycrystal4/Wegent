@@ -4,12 +4,13 @@
 
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { useToast } from '@/hooks/use-toast'
 import { paths } from '@/config/paths'
 import { taskApis } from '@/apis/tasks'
+import { DingTalkMcpConfigDialog } from '@/features/settings/components/DingTalkMcpConfigDialog'
 
 type OpenDialogDetail = {
   type?: string
@@ -27,6 +28,8 @@ type OpenDialogDetail = {
 export default function SchemeURLDialogBridge() {
   const router = useRouter()
   const { toast } = useToast()
+  const [isDingTalkConfigOpen, setIsDingTalkConfigOpen] = useState(false)
+  const [dingtalkServiceId, setDingtalkServiceId] = useState<string>('docs')
 
   const handleOpenDialog = useCallback(
     (e: Event) => {
@@ -86,6 +89,14 @@ export default function SchemeURLDialogBridge() {
             })
           )
         }
+        return
+      }
+
+      if (dialogType === 'dingtalk-mcp-config') {
+        const serviceParam = params.service
+        const serviceId = Array.isArray(serviceParam) ? serviceParam[0] : serviceParam
+        setDingtalkServiceId(typeof serviceId === 'string' && serviceId ? serviceId : 'docs')
+        setIsDingTalkConfigOpen(true)
         return
       }
 
@@ -253,5 +264,11 @@ export default function SchemeURLDialogBridge() {
     }
   }, [handleOpenDialog, handleExportEvent])
 
-  return null
+  return (
+    <DingTalkMcpConfigDialog
+      open={isDingTalkConfigOpen}
+      onOpenChange={setIsDingTalkConfigOpen}
+      serviceId={dingtalkServiceId}
+    />
+  )
 }

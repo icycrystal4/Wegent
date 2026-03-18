@@ -21,10 +21,19 @@ from app.core.config import settings
 from app.models.subtask import Subtask
 from app.models.task import TaskResource
 from app.schemas.kind import Bot, Ghost, Shell, Team
+from app.services.user_mcp_service import user_mcp_service
 from shared.models import ExecutionRequest
 from shared.models.db import Kind, User
 
 logger = logging.getLogger(__name__)
+
+DINGTALK_CONFIG_GUIDE_SKILL = "dingtalk-config-guide"
+DINGTALK_CONFIG_GUIDE_SKILL_REF = {
+    "name": DINGTALK_CONFIG_GUIDE_SKILL,
+    "namespace": "default",
+    "is_public": True,
+}
+DINGTALK_MESSAGE_KEYWORDS = ("钉钉", "dingtalk")
 
 
 class TaskRequestBuilder:
@@ -176,10 +185,18 @@ class TaskRequestBuilder:
 
         # Get skills for the bot (full resolution from Ghost)
         # Convert preload_skills to the format expected by _get_bot_skills
+        effective_preload_skills = list(preload_skills or [])
+        effective_preload_skills = self._inject_conditional_dingtalk_skills(
+            user=user,
+            message=message,
+            preload_skills=effective_preload_skills,
+        )
+
         user_preload_skills = None
-        if preload_skills:
+        if effective_preload_skills:
             user_preload_skills = [
-                {"name": s} if isinstance(s, str) else s for s in preload_skills
+                {"name": s} if isinstance(s, str) else s
+                for s in effective_preload_skills
             ]
 
         resolved_skills, resolved_preload_skills, resolved_user_selected = (
@@ -201,6 +218,10 @@ class TaskRequestBuilder:
             force_override=force_override,
         )
 
+        user_mcp_servers = self._load_user_mcp_servers(user)
+        if bot_config and user_mcp_servers:
+            self._merge_user_mcp_into_bot_config(bot_config, user_mcp_servers)
+
         # Merge user-selected skills into bot_config so Executor downloads them
         if bot_config and resolved_skills:
             all_skill_names = [s["name"] for s in resolved_skills]
@@ -221,7 +242,11 @@ class TaskRequestBuilder:
 
         # Build MCP servers configuration (with auto-injection for subscription tasks)
         mcp_servers = self._build_mcp_servers(
-            bot, team, is_subscription=is_subscription, auth_token=auth_token
+            bot,
+            team,
+            user=user,
+            is_subscription=is_subscription,
+            auth_token=auth_token,
         )
 
         # Get collaboration model
@@ -1289,7 +1314,13 @@ class TaskRequestBuilder:
             return []
 
     def _build_mcp_servers(
-        self, bot: Kind, team: Kind, is_subscription: bool = False, auth_token: str = ""
+        self,
+        bot: Kind,
+        team: Kind,
+        *,
+        user: User,
+        is_subscription: bool = False,
+        auth_token: str = "",
     ) -> list[dict]:
         """Build MCP servers configuration.
 
@@ -1371,10 +1402,15 @@ class TaskRequestBuilder:
                                 server_entry["env"] = server_config["env"]
                             bot_mcp_servers.append(server_entry)
 
-        # Merge system and bot MCP servers (bot takes precedence)
+        user_mcp_servers = self._load_user_mcp_servers(user)
+
+        # Merge system, user, and bot MCP servers (bot takes precedence)
         # Build a dict to deduplicate by server name
         servers_by_name = {}
         for server in system_mcp_servers:
+            server_name = server.get("name", "server")
+            servers_by_name[server_name] = server
+        for server in user_mcp_servers:
             server_name = server.get("name", "server")
             servers_by_name[server_name] = server
         for server in bot_mcp_servers:
@@ -1385,14 +1421,98 @@ class TaskRequestBuilder:
 
         if merged_servers:
             logger.info(
-                "[TaskRequestBuilder] Built %d MCP servers (system=%d, bot=%d): %s",
+                "[TaskRequestBuilder] Built %d MCP servers (system=%d, user=%d, bot=%d): %s",
                 len(merged_servers),
                 len(system_mcp_servers),
+                len(user_mcp_servers),
                 len(bot_mcp_servers),
                 [s["name"] for s in merged_servers],
             )
 
         return merged_servers
+
+    @staticmethod
+    def _load_user_mcp_servers(user: User) -> list[dict[str, Any]]:
+        """Load user-scoped MCP servers from preferences."""
+        return user_mcp_service.list_dingtalk_mcp_servers(user.preferences)
+
+    @staticmethod
+    def _extract_prompt_text(message: Union[str, list]) -> str:
+        """Extract plain text from a prompt payload."""
+        if isinstance(message, str):
+            return message
+
+        if not isinstance(message, list):
+            return ""
+
+        text_parts: list[str] = []
+        for item in message:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") in {"input_text", "text"}:
+                text = item.get("text")
+                if isinstance(text, str) and text:
+                    text_parts.append(text)
+
+        return "\n".join(text_parts)
+
+    def _inject_conditional_dingtalk_skills(
+        self,
+        *,
+        user: User,
+        message: Union[str, list],
+        preload_skills: list,
+    ) -> list:
+        """Preload DingTalk config guidance skill when relevant and needed."""
+        merged_preload_skills = list(preload_skills)
+        prompt_text = self._extract_prompt_text(message).strip().lower()
+        if not prompt_text or not any(
+            keyword in prompt_text for keyword in DINGTALK_MESSAGE_KEYWORDS
+        ):
+            return merged_preload_skills
+
+        service_configs = user_mcp_service.list_dingtalk_service_configs(
+            user.preferences
+        )
+        all_services_ready = all(
+            service.get("enabled") and (service.get("url") or "").strip()
+            for service in service_configs
+        )
+        if all_services_ready:
+            return merged_preload_skills
+
+        existing_names = {
+            skill if isinstance(skill, str) else skill.get("name")
+            for skill in merged_preload_skills
+            if isinstance(skill, (str, dict))
+        }
+        if DINGTALK_CONFIG_GUIDE_SKILL not in existing_names:
+            merged_preload_skills.append(dict(DINGTALK_CONFIG_GUIDE_SKILL_REF))
+
+        return merged_preload_skills
+
+    @staticmethod
+    def _merge_user_mcp_into_bot_config(
+        bot_config_list: list[dict[str, Any]], user_mcp_servers: list[dict[str, Any]]
+    ) -> None:
+        """Inject user-scoped MCP servers into executor bot configs."""
+        if not user_mcp_servers:
+            return
+
+        supported_shell_types = {"ClaudeCode", "Agno"}
+        for bot_config in bot_config_list:
+            if bot_config.get("shell_type") not in supported_shell_types:
+                continue
+
+            merged_servers = {
+                server.get("name", "server"): server
+                for server in (bot_config.get("mcp_servers") or [])
+                if isinstance(server, dict)
+            }
+            for server in user_mcp_servers:
+                merged_servers[server.get("name", "server")] = dict(server)
+
+            bot_config["mcp_servers"] = list(merged_servers.values())
 
     # =========================================================================
     # Claude Code MCP Processing
