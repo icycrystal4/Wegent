@@ -102,8 +102,8 @@ class TestUserMcpsAPI:
             },
             {
                 "provider_id": "dingtalk",
-                "service_id": "sheets",
-                "server_name": "dingtalk_sheets",
+                "service_id": "ai_table",
+                "server_name": "dingtalk_ai_table",
                 "detail_url": "https://mcp.dingtalk.com/#/detail?mcpId=9555",
                 "enabled": False,
                 "url": "",

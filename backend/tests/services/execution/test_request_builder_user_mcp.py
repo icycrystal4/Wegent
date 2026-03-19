@@ -89,9 +89,9 @@ class TestUserScopedMcpInjection:
                     url="https://example.com/docs?token=secret",
                 ),
                 provider_id="dingtalk",
-                service_id="sheets",
+                service_id="ai_table",
                 enabled=True,
-                url="https://example.com/sheets?token=secret",
+                url="https://example.com/ai-table?token=secret",
             )
         )
         user = SimpleNamespace(preferences=preferences)

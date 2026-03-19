@@ -426,7 +426,7 @@
         "save_success": "钉钉文档配置已保存",
         "save_failed": "保存钉钉文档配置失败"
       },
-      "sheets": {
+      "ai_table": {
         "title": "钉钉AI表格",
         "description": "为默认智能体启用钉钉AI表格 MCP 能力。",
         "default_name": "钉钉AI表格",

@@ -426,14 +426,14 @@
         "save_success": "DingTalk Docs configuration saved",
         "save_failed": "Failed to save DingTalk Docs configuration"
       },
-      "sheets": {
-        "title": "DingTalk AI Sheets",
-        "description": "Enable the DingTalk AI Sheets MCP for your default agents.",
-        "default_name": "DingTalk AI Sheets",
-        "enable_label": "Enable DingTalk AI Sheets MCP",
-        "enable_hint": "When enabled, Wegent will inject your DingTalk AI Sheets MCP into supported agents automatically.",
-        "save_success": "DingTalk AI Sheets configuration saved",
-        "save_failed": "Failed to save DingTalk AI Sheets configuration"
+      "ai_table": {
+        "title": "DingTalk AI Table",
+        "description": "Enable the DingTalk AI Table MCP for your default agents.",
+        "default_name": "DingTalk AI Table",
+        "enable_label": "Enable DingTalk AI Table MCP",
+        "enable_hint": "When enabled, Wegent will inject your DingTalk AI Table MCP into supported agents automatically.",
+        "save_success": "DingTalk AI Table configuration saved",
+        "save_failed": "Failed to save DingTalk AI Table configuration"
       }
     }
   },

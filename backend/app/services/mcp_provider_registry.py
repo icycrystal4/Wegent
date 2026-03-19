@@ -37,9 +37,9 @@ MCP_PROVIDER_REGISTRY: dict[str, MCPProviderDefinition] = {
                 "server_name": "dingtalk_docs",
                 "detail_url": "https://mcp.dingtalk.com/#/detail?mcpId=9629",
             },
-            "sheets": {
-                "service_id": "sheets",
-                "server_name": "dingtalk_sheets",
+            "ai_table": {
+                "service_id": "ai_table",
+                "server_name": "dingtalk_ai_table",
                 "detail_url": "https://mcp.dingtalk.com/#/detail?mcpId=9555",
             },
         },
