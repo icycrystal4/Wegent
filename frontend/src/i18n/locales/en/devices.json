@@ -118,27 +118,6 @@
   "cloud_coming_soon_description": "Cloud device support is under active development. Stay tuned for updates!",
   "openclaw_badge": "🦞 OpenClaw",
   "got_it": "Got it",
-  "mail_config": {
-    "title": "Configure Mail",
-    "description": "Enter the mailbox password to generate a local Himalaya config on your device. Retry the mail action after it finishes.",
-    "device_label": "Target Device",
-    "device_placeholder": "Select an online local device",
-    "no_local_devices": "No online local devices are available to write the mail config.",
-    "account_label": "Account",
-    "account_placeholder": "Enter account name",
-    "account_hint": "The config account will be generated as {{account}}.",
-    "password_label": "Mailbox Password",
-    "password_placeholder": "Enter mailbox password",
-    "password_hint": "The password is only used to generate local config and is never shown in chat.",
-    "save": "Generate Config",
-    "saving": "Generating...",
-    "loading_account": "Loading...",
-    "save_success": "Mail config generated",
-    "save_failed": "Failed to generate mail config",
-    "retry_hint": "Retry the mail action you were running.",
-    "load_devices_failed": "Failed to load local devices",
-    "load_user_failed": "Failed to load the current user"
-  },
   "actions": {
     "upgrade": "Upgrade"
   },
