@@ -157,6 +157,32 @@ Example:
             # Get sandbox manager from base class
             sandbox_manager = self._get_sandbox_manager()
 
+            await sandbox_manager.ensure_device_binding_loaded()
+            if sandbox_manager.is_device_backend_bound():
+                logger.info(
+                    "[SandboxDownloadAttachmentTool] Downloading attachment via bound device backend: %s -> %s",
+                    attachment_url,
+                    save_path,
+                )
+                response = await sandbox_manager.download_attachment_via_device(
+                    attachment_url=attachment_url,
+                    save_path=save_path,
+                    timeout_seconds=effective_timeout,
+                )
+                if response.get("success"):
+                    await self._emit_tool_status(
+                        "completed",
+                        f"File downloaded successfully ({response.get('file_size', 0)} bytes)",
+                        response,
+                    )
+                else:
+                    await self._emit_tool_status(
+                        "failed",
+                        response.get("error", "Failed to download file"),
+                        response,
+                    )
+                return json.dumps(response, ensure_ascii=False, indent=2)
+
             # Get or create sandbox
             logger.info(
                 f"[SandboxDownloadAttachmentTool] Getting or creating sandbox..."

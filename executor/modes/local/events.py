@@ -38,6 +38,11 @@ class SandboxEvents:
     """Sandbox helper events for lightweight device-side execution."""
 
     EXEC = "sandbox:exec"
+    READ_FILE = "sandbox:read_file"
+    LIST_FILES = "sandbox:list_files"
+    WRITE_FILE = "sandbox:write_file"
+    DOWNLOAD_ATTACHMENT = "sandbox:download_attachment"
+    UPLOAD_ATTACHMENT = "sandbox:upload_attachment"
 
 
 class ChatEvents:

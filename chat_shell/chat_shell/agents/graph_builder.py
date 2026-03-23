@@ -233,7 +233,7 @@ class LangGraphAgentBuilder:
         self,
         llm: BaseChatModel,
         tool_registry: ToolRegistry | None = None,
-        max_iterations: int = 10,
+        max_iterations: int = 50,
         enable_checkpointing: bool = False,
         max_truncation_retries: int | None = None,
     ):
@@ -268,6 +268,52 @@ class LangGraphAgentBuilder:
 
         # Automatically detect PromptModifierTool instances from registered tools
         self._prompt_modifier_tools = self._find_prompt_modifier_tools()
+
+    async def _stream_final_response_without_tools(
+        self,
+        lc_messages: list[BaseMessage],
+        system_notice: str,
+    ) -> AsyncGenerator[str, None]:
+        """Ask the model for a final response without allowing more tools."""
+        final_messages = list(lc_messages) + [HumanMessage(content=system_notice)]
+
+        async for chunk in self.llm.astream(final_messages):
+            if hasattr(chunk, "content"):
+                content = chunk.content
+                if isinstance(content, str) and content:
+                    yield content
+                elif isinstance(content, list):
+                    for part in content:
+                        if isinstance(part, str) and part:
+                            yield part
+                        elif isinstance(part, dict):
+                            text = part.get("text", "")
+                            if text:
+                                yield text
+
+    async def _build_final_state_without_tools(
+        self,
+        lc_messages: list[BaseMessage],
+        system_notice: str,
+    ) -> dict[str, Any]:
+        """Get a final LLM response without allowing more tools."""
+        final_messages = list(lc_messages) + [HumanMessage(content=system_notice)]
+        response = await self.llm.ainvoke(final_messages)
+
+        final_content = ""
+        if hasattr(response, "content"):
+            if isinstance(response.content, str):
+                final_content = response.content
+            elif isinstance(response.content, list):
+                text_parts = []
+                for part in response.content:
+                    if isinstance(part, str):
+                        text_parts.append(part)
+                    elif isinstance(part, dict) and part.get("type") == "text":
+                        text_parts.append(part.get("text", ""))
+                final_content = "".join(text_parts)
+
+        return {"messages": list(lc_messages) + [AIMessage(content=final_content)]}
 
     def _find_prompt_modifier_tools(self) -> list[Any]:
         """Find all tools that implement the PromptModifierTool protocol.
@@ -1103,33 +1149,16 @@ class LangGraphAgentBuilder:
                 "Asking model to provide final response.",
                 self.max_iterations,
             )
-
-            # Build messages with the limit reached notice
-            # Add a human message to prompt the model to provide final response
-            limit_messages = list(lc_messages) + [
-                HumanMessage(content=TOOL_LIMIT_REACHED_MESSAGE)
-            ]
-
-            # Call the LLM directly (without tools) to get final response
             try:
-                async for chunk in self.llm.astream(limit_messages):
-                    if hasattr(chunk, "content"):
-                        content = chunk.content
-                        if isinstance(content, str) and content:
-                            yield content
-                        elif isinstance(content, list):
-                            for part in content:
-                                if isinstance(part, str) and part:
-                                    yield part
-                                elif isinstance(part, dict):
-                                    text = part.get("text", "")
-                                    if text:
-                                        yield text
-
+                async for chunk in self._stream_final_response_without_tools(
+                    lc_messages,
+                    TOOL_LIMIT_REACHED_MESSAGE,
+                ):
+                    yield chunk
                 logger.info(
                     "[stream_tokens] Final response generated after tool limit reached"
                 )
-            except Exception as recovery_error:
+            except Exception:
                 logger.exception(
                     "Error generating final response after tool limit reached"
                 )
@@ -1289,32 +1318,11 @@ class LangGraphAgentBuilder:
                 "Asking model to provide final response.",
                 self.max_iterations,
             )
-
-            # Build messages with the limit reached notice
-            limit_messages = list(lc_messages) + [
-                HumanMessage(content=TOOL_LIMIT_REACHED_MESSAGE)
-            ]
-
-            # Call the LLM directly (without tools) to get final response
             try:
-                response = await self.llm.ainvoke(limit_messages)
-                final_content = ""
-                if hasattr(response, "content"):
-                    if isinstance(response.content, str):
-                        final_content = response.content
-                    elif isinstance(response.content, list):
-                        text_parts = []
-                        for part in response.content:
-                            if isinstance(part, str):
-                                text_parts.append(part)
-                            elif isinstance(part, dict) and part.get("type") == "text":
-                                text_parts.append(part.get("text", ""))
-                        final_content = "".join(text_parts)
-
-                # Create a final state with the response
-                final_state = {
-                    "messages": list(lc_messages) + [AIMessage(content=final_content)]
-                }
+                final_state = await self._build_final_state_without_tools(
+                    lc_messages,
+                    TOOL_LIMIT_REACHED_MESSAGE,
+                )
 
                 logger.debug(
                     "[stream_events_with_state] Final response generated after tool limit reached"

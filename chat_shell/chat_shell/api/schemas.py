@@ -76,7 +76,7 @@ class ChatEvent:
     extra_tools: list[Any] | None = None
     enable_web_search: bool = False
     search_engine: str | None = None
-    max_iterations: int = 10
+    max_iterations: int = 50
 
     # Metadata
     message_id: int | None = None
@@ -119,7 +119,7 @@ class ChatEvent:
             extra_tools=data.get("extra_tools"),
             enable_web_search=data.get("enable_web_search", False),
             search_engine=data.get("search_engine"),
-            max_iterations=data.get("max_iterations", 10),
+            max_iterations=data.get("max_iterations", 50),
             message_id=data.get("message_id"),
             shell_type=data.get("shell_type", "Chat"),
         )

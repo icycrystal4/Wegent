@@ -194,17 +194,23 @@ Example:
         try:
             # Get sandbox manager from base class
             sandbox_manager = self._get_sandbox_manager()
+            await sandbox_manager.ensure_device_binding_loaded()
 
             if sandbox_manager.should_use_device_backend_for_command(raw_command):
-                logger.info(
-                    "[SandboxCommandTool] Routing command to device backend: %s",
-                    raw_command[:100],
-                )
+                if sandbox_manager.is_device_backend_bound():
+                    logger.info(
+                        "[SandboxCommandTool] Routing command to bound device backend: %s",
+                        raw_command[:100],
+                    )
+                else:
+                    logger.info(
+                        "[SandboxCommandTool] Routing command to device backend: %s",
+                        raw_command[:100],
+                    )
                 response = await sandbox_manager.execute_command_via_device(
                     command=raw_command,
                     working_dir=working_dir,
                     timeout_seconds=effective_timeout,
-                    required_capability="himalaya_mail",
                 )
 
                 if response.get("success"):

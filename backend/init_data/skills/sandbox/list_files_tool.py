@@ -135,6 +135,30 @@ Example:
             # Get sandbox manager from base class
             sandbox_manager = self._get_sandbox_manager()
 
+            await sandbox_manager.ensure_device_binding_loaded()
+            if sandbox_manager.is_device_backend_bound():
+                logger.info(
+                    "[SandboxListFilesTool] Listing files from bound device backend: %s",
+                    path,
+                )
+                response = await sandbox_manager.list_files_via_device(
+                    path=path or "/home/user",
+                    depth=depth or 1,
+                )
+                if response.get("success"):
+                    await self._emit_tool_status(
+                        "completed",
+                        f"Listed {response.get('total', 0)} entries",
+                        response,
+                    )
+                else:
+                    await self._emit_tool_status(
+                        "failed",
+                        response.get("error", "Failed to list files"),
+                        response,
+                    )
+                return json.dumps(response, ensure_ascii=False, indent=2)
+
             # Get or create sandbox
             logger.info(f"[SandboxListFilesTool] Getting or creating sandbox...")
             sandbox, error = await sandbox_manager.get_or_create_sandbox(

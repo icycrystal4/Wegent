@@ -53,7 +53,7 @@ class AgentConfig:
 
     model_config: dict[str, Any]
     system_prompt: str = ""
-    max_iterations: int = 10  # Default, can be overridden by settings
+    max_iterations: int = 50  # Default, can be overridden by settings
     extra_tools: list[BaseTool] | None = None
     streaming: bool = True
     # Prompt enhancement options (handled internally by ChatAgent)

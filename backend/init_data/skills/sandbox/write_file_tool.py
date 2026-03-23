@@ -177,6 +177,32 @@ Example - Writing HTML file:
             # Get sandbox manager from base class
             sandbox_manager = self._get_sandbox_manager()
 
+            await sandbox_manager.ensure_device_binding_loaded()
+            if sandbox_manager.is_device_backend_bound():
+                logger.info(
+                    "[SandboxWriteFileTool] Writing file to bound device backend: %s",
+                    file_path,
+                )
+                response = await sandbox_manager.write_file_via_device(
+                    file_path=file_path,
+                    content=content,
+                    format=format or "text",
+                    create_dirs=bool(create_dirs),
+                )
+                if response.get("success"):
+                    await self._emit_tool_status(
+                        "completed",
+                        f"File written successfully ({response.get('size', 0)} bytes)",
+                        response,
+                    )
+                else:
+                    await self._emit_tool_status(
+                        "failed",
+                        response.get("error", "Failed to write file"),
+                        response,
+                    )
+                return json.dumps(response, ensure_ascii=False, indent=2)
+
             # Get or create sandbox
             logger.info(f"[SandboxWriteFileTool] Getting or creating sandbox...")
             sandbox, error = await sandbox_manager.get_or_create_sandbox(

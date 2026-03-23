@@ -235,6 +235,23 @@ class LocalRunner:
             "device:upgrade", self.upgrade_handler.handle_upgrade_command
         )
         self.websocket_client.on(SandboxEvents.EXEC, self.sandbox_handler.handle_exec)
+        self.websocket_client.on(
+            SandboxEvents.READ_FILE, self.sandbox_handler.handle_read_file
+        )
+        self.websocket_client.on(
+            SandboxEvents.LIST_FILES, self.sandbox_handler.handle_list_files
+        )
+        self.websocket_client.on(
+            SandboxEvents.WRITE_FILE, self.sandbox_handler.handle_write_file
+        )
+        self.websocket_client.on(
+            SandboxEvents.DOWNLOAD_ATTACHMENT,
+            self.sandbox_handler.handle_download_attachment,
+        )
+        self.websocket_client.on(
+            SandboxEvents.UPLOAD_ATTACHMENT,
+            self.sandbox_handler.handle_upload_attachment,
+        )
 
         logger.info("WebSocket event handlers registered")
 

@@ -165,6 +165,31 @@ After successful upload, you can provide the download_url to the user:
             # Get sandbox manager from base class
             sandbox_manager = self._get_sandbox_manager()
 
+            await sandbox_manager.ensure_device_binding_loaded()
+            if sandbox_manager.is_device_backend_bound():
+                logger.info(
+                    "[SandboxUploadAttachmentTool] Uploading file via bound device backend: %s",
+                    file_path,
+                )
+                response = await sandbox_manager.upload_attachment_via_device(
+                    file_path=file_path,
+                    overwrite_attachment_id=overwrite_attachment_id,
+                    timeout_seconds=effective_timeout,
+                )
+                if response.get("success"):
+                    await self._emit_tool_status(
+                        "completed",
+                        f"File uploaded successfully ({response.get('file_size', 0)} bytes)",
+                        response,
+                    )
+                else:
+                    await self._emit_tool_status(
+                        "failed",
+                        response.get("error", "Failed to upload file"),
+                        response,
+                    )
+                return json.dumps(response, ensure_ascii=False, indent=2)
+
             # Get or create sandbox
             logger.info(f"[SandboxUploadAttachmentTool] Getting or creating sandbox...")
             sandbox, error = await sandbox_manager.get_or_create_sandbox(

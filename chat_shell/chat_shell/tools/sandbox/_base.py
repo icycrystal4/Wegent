@@ -16,6 +16,7 @@ E2B SDK behavior.
 """
 
 import asyncio
+import base64
 import logging
 import os
 import re
@@ -30,6 +31,14 @@ DEFAULT_EXECUTOR_MANAGER_URL = "http://localhost:8001"
 DEFAULT_BACKEND_API_URL = "http://localhost:8000"
 DEFAULT_SANDBOX_TIMEOUT = 1800  # 30 minutes
 DEVICE_EXEC_ENDPOINT = "/api/internal/devices/sandbox/exec"
+DEVICE_READ_FILE_ENDPOINT = "/api/internal/devices/sandbox/read-file"
+DEVICE_LIST_FILES_ENDPOINT = "/api/internal/devices/sandbox/list-files"
+DEVICE_WRITE_FILE_ENDPOINT = "/api/internal/devices/sandbox/write-file"
+DEVICE_DOWNLOAD_ATTACHMENT_ENDPOINT = (
+    "/api/internal/devices/sandbox/download-attachment"
+)
+DEVICE_UPLOAD_ATTACHMENT_ENDPOINT = "/api/internal/devices/sandbox/upload-attachment"
+DEVICE_BINDING_ENDPOINT_TEMPLATE = "/api/internal/devices/sandbox/binding/{task_id}"
 HIMALAYA_COMMAND_PATTERN = re.compile(
     r"(^|\s)(himalaya|command\s+-v\s+himalaya|which\s+himalaya)(\s|$)"
 )
@@ -236,6 +245,9 @@ class SandboxManager:
         self.timeout = timeout
         self.bot_config = bot_config or []
         self.auth_token = auth_token
+        self._bound_backend: Optional[str] = None
+        self._bound_device_id: Optional[str] = None
+        self._binding_loaded: bool = False
 
         # Ensure E2B SDK is patched
         patch_e2b_sdk()
@@ -380,7 +392,60 @@ class SandboxManager:
 
     def should_use_device_backend_for_command(self, command: str) -> bool:
         """Return True when a command should prefer the device-backed executor."""
-        return bool(HIMALAYA_COMMAND_PATTERN.search(command))
+        return self.is_device_backend_bound() or bool(
+            HIMALAYA_COMMAND_PATTERN.search(command)
+        )
+
+    def is_device_backend_bound(self) -> bool:
+        """Return whether this task is already pinned to a device backend."""
+        return self._bound_backend == "device" and bool(self._bound_device_id)
+
+    def bind_device_backend(self, device_id: str) -> None:
+        """Pin the current task to a specific device-backed sandbox."""
+        self._bound_backend = "device"
+        self._bound_device_id = device_id
+        logger.info(
+            "[SandboxManager] Bound task_id=%s to device backend: device_id=%s",
+            self.task_id,
+            device_id,
+        )
+
+    async def ensure_device_binding_loaded(self) -> None:
+        """Load sticky device binding from backend once per task if present."""
+        if self._binding_loaded or self.is_device_backend_bound():
+            return
+
+        backend_url = _get_backend_api_url()
+        headers = {}
+        if self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
+
+        binding_url = f"{backend_url}{DEVICE_BINDING_ENDPOINT_TEMPLATE.format(task_id=self.task_id)}"
+
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(
+                    binding_url,
+                    params={"user_id": self.user_id},
+                    headers=headers,
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except Exception as exc:
+            logger.warning(
+                "[SandboxManager] Failed to load task sandbox binding: task_id=%s, error=%s",
+                self.task_id,
+                exc,
+            )
+            self._binding_loaded = True
+            return
+
+        backend = payload.get("backend")
+        device_id = payload.get("device_id")
+        if backend == "device" and isinstance(device_id, str) and device_id:
+            self.bind_device_backend(device_id)
+
+        self._binding_loaded = True
 
     async def execute_command_via_device(
         self,
@@ -390,36 +455,162 @@ class SandboxManager:
         required_capability: Optional[str] = None,
     ) -> dict[str, Any]:
         """Execute a command through the backend's device sandbox bridge."""
+        return await self._post_device_backend(
+            endpoint=DEVICE_EXEC_ENDPOINT,
+            payload={
+                "command": command,
+                "working_dir": working_dir or "/home/user",
+                "timeout_seconds": timeout_seconds,
+                "required_capability": required_capability,
+            },
+            timeout_seconds=timeout_seconds,
+        )
+
+    async def read_file_via_device(
+        self,
+        file_path: str,
+        format: str = "text",
+    ) -> dict[str, Any]:
+        """Read a file through the backend's device sandbox bridge."""
+        return await self._post_device_backend(
+            endpoint=DEVICE_READ_FILE_ENDPOINT,
+            payload={
+                "file_path": file_path,
+                "format": format,
+            },
+            timeout_seconds=60,
+            unwrap_data=True,
+        )
+
+    async def list_files_via_device(
+        self,
+        path: str = "/home/user",
+        depth: int = 1,
+    ) -> dict[str, Any]:
+        """List files through the backend's device sandbox bridge."""
+        return await self._post_device_backend(
+            endpoint=DEVICE_LIST_FILES_ENDPOINT,
+            payload={
+                "path": path,
+                "depth": depth,
+            },
+            timeout_seconds=60,
+            unwrap_data=True,
+        )
+
+    async def write_file_via_device(
+        self,
+        file_path: str,
+        content: str,
+        format: str = "text",
+        create_dirs: bool = True,
+    ) -> dict[str, Any]:
+        """Write a file through the backend's device sandbox bridge."""
+        return await self._post_device_backend(
+            endpoint=DEVICE_WRITE_FILE_ENDPOINT,
+            payload={
+                "file_path": file_path,
+                "content": content,
+                "format": format,
+                "create_dirs": create_dirs,
+            },
+            timeout_seconds=60,
+            unwrap_data=True,
+        )
+
+    async def download_attachment_via_device(
+        self,
+        attachment_url: str,
+        save_path: str,
+        timeout_seconds: int = 300,
+    ) -> dict[str, Any]:
+        """Download a Wegent attachment through the device sandbox bridge."""
+        return await self._post_device_backend(
+            endpoint=DEVICE_DOWNLOAD_ATTACHMENT_ENDPOINT,
+            payload={
+                "attachment_url": attachment_url,
+                "save_path": save_path,
+                "auth_token": self.auth_token,
+                "api_base_url": _get_backend_api_url(),
+                "timeout_seconds": timeout_seconds,
+            },
+            timeout_seconds=timeout_seconds,
+            unwrap_data=True,
+        )
+
+    async def upload_attachment_via_device(
+        self,
+        file_path: str,
+        overwrite_attachment_id: Optional[int] = None,
+        timeout_seconds: int = 300,
+    ) -> dict[str, Any]:
+        """Upload a device-local file back to Wegent attachments."""
+        return await self._post_device_backend(
+            endpoint=DEVICE_UPLOAD_ATTACHMENT_ENDPOINT,
+            payload={
+                "file_path": file_path,
+                "auth_token": self.auth_token,
+                "api_base_url": _get_backend_api_url(),
+                "overwrite_attachment_id": overwrite_attachment_id,
+                "timeout_seconds": timeout_seconds,
+            },
+            timeout_seconds=timeout_seconds,
+            unwrap_data=True,
+        )
+
+    async def _post_device_backend(
+        self,
+        endpoint: str,
+        payload: dict[str, Any],
+        timeout_seconds: int,
+        unwrap_data: bool = False,
+    ) -> dict[str, Any]:
+        """Call an internal backend endpoint that proxies to the sticky device."""
+        await self.ensure_device_binding_loaded()
         backend_url = _get_backend_api_url()
         headers = {"Content-Type": "application/json"}
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
 
-        payload = {
+        request_payload = {
+            "task_id": self.task_id,
             "user_id": self.user_id,
-            "command": command,
-            "working_dir": working_dir or "/home/user",
-            "timeout_seconds": timeout_seconds,
-            "required_capability": required_capability,
+            **payload,
+            "device_id": self._bound_device_id,
         }
 
         logger.info(
-            "[SandboxManager] Executing command via device backend: backend_url=%s, "
-            "working_dir=%s, timeout=%ss, required_capability=%s",
+            "[SandboxManager] Calling device backend: endpoint=%s, backend_url=%s, "
+            "timeout=%ss, bound_device_id=%s",
+            endpoint,
             backend_url,
-            payload["working_dir"],
             timeout_seconds,
-            required_capability,
+            self._bound_device_id,
         )
 
         async with httpx.AsyncClient(timeout=max(timeout_seconds + 10, 60)) as client:
             response = await client.post(
-                f"{backend_url}{DEVICE_EXEC_ENDPOINT}",
-                json=payload,
+                f"{backend_url}{endpoint}",
+                json=request_payload,
                 headers=headers,
             )
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+
+        device_id = result.get("device_id")
+        if isinstance(device_id, str) and device_id:
+            self.bind_device_backend(device_id)
+
+        if unwrap_data and isinstance(result.get("data"), dict):
+            result = {
+                "success": result.get("success", False),
+                "execution_time": result.get("execution_time", 0.0),
+                "device_id": result.get("device_id"),
+                "backend": result.get("backend", "device"),
+                **result["data"],
+            }
+
+        return result
 
 
 def _get_backend_api_url() -> str:

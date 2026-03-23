@@ -9,11 +9,18 @@ This module implements handlers for events received from the Backend server.
 """
 
 import asyncio
+import base64
+import grp
+import mimetypes
 import os
+import pwd
 import subprocess
 import threading
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional
+
+import requests
 
 from shared.logger import setup_logger
 from shared.models.execution import ExecutionRequest
@@ -386,6 +393,10 @@ class UpgradeHandler:
 class SandboxHandler:
     """Handler for lightweight sandbox-style device commands."""
 
+    MAX_READ_FILE_SIZE = 10 * 1024 * 1024
+    MAX_WRITE_FILE_SIZE = 10 * 1024 * 1024
+    MAX_UPLOAD_FILE_SIZE = 100 * 1024 * 1024
+
     def __init__(self, runner: "LocalRunner"):
         """Initialize the sandbox handler."""
         self.runner = runner
@@ -421,6 +432,108 @@ class SandboxHandler:
             timeout_seconds,
         )
 
+    async def handle_read_file(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Read a file from the device filesystem."""
+        file_path = str(data.get("file_path", "")).strip()
+        file_format = str(data.get("format") or "text")
+        if not file_path:
+            return self._error_response("file_path is required")
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._read_file_sync,
+            file_path,
+            file_format,
+        )
+
+    async def handle_list_files(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """List files from the device filesystem."""
+        path = str(data.get("path") or os.path.expanduser("~"))
+        depth = int(data.get("depth") or 1)
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._list_files_sync,
+            path,
+            depth,
+        )
+
+    async def handle_write_file(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Write a file to the device filesystem."""
+        file_path = str(data.get("file_path", "")).strip()
+        content = data.get("content")
+        file_format = str(data.get("format") or "text")
+        create_dirs = bool(data.get("create_dirs", True))
+
+        if not file_path:
+            return self._error_response("file_path is required")
+        if content is None or content == "":
+            return self._error_response("content is required")
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._write_file_sync,
+            file_path,
+            str(content),
+            file_format,
+            create_dirs,
+        )
+
+    async def handle_download_attachment(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Download a Wegent attachment onto the device."""
+        attachment_url = str(data.get("attachment_url", "")).strip()
+        save_path = str(data.get("save_path", "")).strip()
+        auth_token = str(data.get("auth_token", "")).strip()
+        api_base_url = str(data.get("api_base_url", "")).rstrip("/")
+        timeout_seconds = int(data.get("timeout_seconds") or 300)
+
+        if not attachment_url or not save_path:
+            return self._error_response("attachment_url and save_path are required")
+        if not auth_token:
+            return self._error_response("auth_token is required")
+        if not api_base_url:
+            return self._error_response("api_base_url is required")
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._download_attachment_sync,
+            attachment_url,
+            save_path,
+            auth_token,
+            api_base_url,
+            timeout_seconds,
+        )
+
+    async def handle_upload_attachment(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Upload a device-local file back to Wegent attachments."""
+        file_path = str(data.get("file_path", "")).strip()
+        auth_token = str(data.get("auth_token", "")).strip()
+        api_base_url = str(data.get("api_base_url", "")).rstrip("/")
+        overwrite_attachment_id = data.get("overwrite_attachment_id")
+        timeout_seconds = int(data.get("timeout_seconds") or 300)
+
+        if not file_path:
+            return self._error_response("file_path is required")
+        if not auth_token:
+            return self._error_response("auth_token is required")
+        if not api_base_url:
+            return self._error_response("api_base_url is required")
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._upload_attachment_sync,
+            file_path,
+            auth_token,
+            api_base_url,
+            overwrite_attachment_id,
+            timeout_seconds,
+        )
+
     def _execute_command_sync(
         self,
         command: str,
@@ -429,6 +542,7 @@ class SandboxHandler:
     ) -> Dict[str, Any]:
         """Execute a command synchronously in a worker thread."""
         started_at = time.monotonic()
+        resolved_working_dir = self._normalize_path(working_dir)
 
         try:
             result = subprocess.run(
@@ -436,7 +550,7 @@ class SandboxHandler:
                 shell=True,
                 capture_output=True,
                 text=True,
-                cwd=working_dir,
+                cwd=resolved_working_dir,
                 timeout=timeout_seconds,
                 encoding="utf-8",
                 errors="replace",
@@ -451,7 +565,12 @@ class SandboxHandler:
                 "execution_time": time.monotonic() - started_at,
             }
         except Exception as exc:
-            logger.error("[SandboxHandler] Device command failed: %s", exc)
+            logger.error(
+                "[SandboxHandler] Device command failed: cwd=%s, resolved_cwd=%s, error=%s",
+                working_dir,
+                resolved_working_dir,
+                exc,
+            )
             return {
                 "success": False,
                 "stdout": "",
@@ -466,4 +585,391 @@ class SandboxHandler:
             "stderr": result.stderr or "",
             "exit_code": result.returncode,
             "execution_time": time.monotonic() - started_at,
+        }
+
+    def _read_file_sync(self, file_path: str, file_format: str) -> Dict[str, Any]:
+        """Read a file synchronously."""
+        started_at = time.monotonic()
+        try:
+            resolved_path = self._normalize_path(file_path)
+            if not os.path.exists(resolved_path):
+                return self._error_response(
+                    f"File not found: {resolved_path}",
+                    execution_time=time.monotonic() - started_at,
+                    path=resolved_path,
+                    size=0,
+                    content="",
+                )
+            if not os.path.isfile(resolved_path):
+                return self._error_response(
+                    f"Path is not a file: {resolved_path}",
+                    execution_time=time.monotonic() - started_at,
+                    path=resolved_path,
+                    size=0,
+                    content="",
+                )
+
+            file_size = os.path.getsize(resolved_path)
+            if file_size > self.MAX_READ_FILE_SIZE:
+                return self._error_response(
+                    f"File too large: {file_size} bytes",
+                    execution_time=time.monotonic() - started_at,
+                    path=resolved_path,
+                    size=file_size,
+                    content="",
+                )
+
+            if file_format == "bytes":
+                with open(resolved_path, "rb") as file_obj:
+                    content = base64.b64encode(file_obj.read()).decode("ascii")
+            else:
+                with open(
+                    resolved_path,
+                    "r",
+                    encoding="utf-8",
+                    errors="replace",
+                ) as file_obj:
+                    content = file_obj.read()
+
+            return {
+                "success": True,
+                "content": content,
+                "size": file_size,
+                "path": resolved_path,
+                "format": file_format,
+                "modified_time": self._iso_mtime(resolved_path),
+                "execution_time": time.monotonic() - started_at,
+            }
+        except Exception as exc:
+            logger.error("[SandboxHandler] Device read_file failed: %s", exc)
+            return self._error_response(
+                str(exc),
+                execution_time=time.monotonic() - started_at,
+                path=file_path,
+                size=0,
+                content="",
+            )
+
+    def _list_files_sync(self, path: str, depth: int) -> Dict[str, Any]:
+        """List files synchronously."""
+        started_at = time.monotonic()
+        try:
+            resolved_path = self._normalize_path(path)
+            if not os.path.exists(resolved_path):
+                return self._error_response(
+                    f"Path not found: {resolved_path}",
+                    execution_time=time.monotonic() - started_at,
+                    path=resolved_path,
+                    entries=[],
+                    total=0,
+                )
+            if not os.path.isdir(resolved_path):
+                return self._error_response(
+                    f"Path is not a directory: {resolved_path}",
+                    execution_time=time.monotonic() - started_at,
+                    path=resolved_path,
+                    entries=[],
+                    total=0,
+                )
+
+            entries = self._collect_entries(resolved_path, max(depth, 1))
+            return {
+                "success": True,
+                "entries": entries,
+                "total": len(entries),
+                "path": resolved_path,
+                "execution_time": time.monotonic() - started_at,
+            }
+        except Exception as exc:
+            logger.error("[SandboxHandler] Device list_files failed: %s", exc)
+            return self._error_response(
+                str(exc),
+                execution_time=time.monotonic() - started_at,
+                path=path,
+                entries=[],
+                total=0,
+            )
+
+    def _write_file_sync(
+        self,
+        file_path: str,
+        content: str,
+        file_format: str,
+        create_dirs: bool,
+    ) -> Dict[str, Any]:
+        """Write a file synchronously."""
+        started_at = time.monotonic()
+        try:
+            resolved_path = self._normalize_path(file_path)
+            parent_dir = os.path.dirname(resolved_path)
+            if create_dirs and parent_dir:
+                Path(parent_dir).mkdir(parents=True, exist_ok=True)
+
+            if file_format == "bytes":
+                content_bytes = base64.b64decode(content)
+                mode = "wb"
+            else:
+                content_bytes = content.encode("utf-8")
+                mode = "w"
+
+            if len(content_bytes) > self.MAX_WRITE_FILE_SIZE:
+                return self._error_response(
+                    f"Content too large: {len(content_bytes)} bytes",
+                    execution_time=time.monotonic() - started_at,
+                    path=resolved_path,
+                    size=len(content_bytes),
+                )
+
+            with open(
+                resolved_path,
+                mode,
+                encoding=None if mode == "wb" else "utf-8",
+            ) as file_obj:
+                if mode == "wb":
+                    file_obj.write(content_bytes)
+                else:
+                    file_obj.write(content)
+
+            file_size = os.path.getsize(resolved_path)
+            return {
+                "success": True,
+                "path": resolved_path,
+                "size": file_size,
+                "format": file_format,
+                "modified_time": self._iso_mtime(resolved_path),
+                "execution_time": time.monotonic() - started_at,
+            }
+        except Exception as exc:
+            logger.error("[SandboxHandler] Device write_file failed: %s", exc)
+            return self._error_response(
+                str(exc),
+                execution_time=time.monotonic() - started_at,
+                path=file_path,
+                size=0,
+            )
+
+    def _download_attachment_sync(
+        self,
+        attachment_url: str,
+        save_path: str,
+        auth_token: str,
+        api_base_url: str,
+        timeout_seconds: int,
+    ) -> Dict[str, Any]:
+        """Download an attachment synchronously."""
+        started_at = time.monotonic()
+        resolved_path = self._normalize_path(save_path)
+        try:
+            Path(os.path.dirname(resolved_path)).mkdir(parents=True, exist_ok=True)
+            download_url = (
+                attachment_url
+                if attachment_url.startswith(("http://", "https://"))
+                else f"{api_base_url}{attachment_url if attachment_url.startswith('/') else '/' + attachment_url}"
+            )
+            response = requests.get(
+                download_url,
+                headers={"Authorization": f"Bearer {auth_token}"},
+                timeout=timeout_seconds,
+                stream=True,
+            )
+            response.raise_for_status()
+            with open(resolved_path, "wb") as file_obj:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        file_obj.write(chunk)
+
+            file_size = os.path.getsize(resolved_path)
+            return {
+                "success": True,
+                "file_path": resolved_path,
+                "file_size": file_size,
+                "message": "File downloaded successfully",
+                "execution_time": time.monotonic() - started_at,
+            }
+        except Exception as exc:
+            logger.error("[SandboxHandler] Device download_attachment failed: %s", exc)
+            return self._error_response(
+                f"Failed to download file: {exc}",
+                execution_time=time.monotonic() - started_at,
+                file_path=resolved_path,
+                file_size=0,
+            )
+
+    def _upload_attachment_sync(
+        self,
+        file_path: str,
+        auth_token: str,
+        api_base_url: str,
+        overwrite_attachment_id: Optional[int],
+        timeout_seconds: int,
+    ) -> Dict[str, Any]:
+        """Upload an attachment synchronously."""
+        started_at = time.monotonic()
+        resolved_path = self._normalize_path(file_path)
+        try:
+            if not os.path.exists(resolved_path):
+                return self._error_response(
+                    f"File not found: {resolved_path}",
+                    execution_time=time.monotonic() - started_at,
+                    attachment_id=None,
+                    filename=os.path.basename(resolved_path),
+                    file_size=0,
+                    download_url="",
+                )
+            if not os.path.isfile(resolved_path):
+                return self._error_response(
+                    f"Path is not a file: {resolved_path}",
+                    execution_time=time.monotonic() - started_at,
+                    attachment_id=None,
+                    filename=os.path.basename(resolved_path),
+                    file_size=0,
+                    download_url="",
+                )
+
+            file_size = os.path.getsize(resolved_path)
+            if file_size > self.MAX_UPLOAD_FILE_SIZE:
+                return self._error_response(
+                    f"File too large: {file_size} bytes",
+                    execution_time=time.monotonic() - started_at,
+                    attachment_id=None,
+                    filename=os.path.basename(resolved_path),
+                    file_size=file_size,
+                    download_url="",
+                )
+
+            upload_url = f"{api_base_url}/api/attachments/upload"
+            if overwrite_attachment_id is not None:
+                upload_url = (
+                    f"{upload_url}?overwrite_attachment_id={overwrite_attachment_id}"
+                )
+
+            with open(resolved_path, "rb") as file_obj:
+                response = requests.post(
+                    upload_url,
+                    headers={"Authorization": f"Bearer {auth_token}"},
+                    files={"file": (os.path.basename(resolved_path), file_obj)},
+                    timeout=timeout_seconds,
+                )
+            response.raise_for_status()
+
+            payload = response.json()
+            if "detail" in payload:
+                detail = payload["detail"]
+                detail_message = (
+                    detail.get("message") if isinstance(detail, dict) else str(detail)
+                )
+                return self._error_response(
+                    f"Upload API error: {detail_message}",
+                    execution_time=time.monotonic() - started_at,
+                    attachment_id=None,
+                    filename=os.path.basename(resolved_path),
+                    file_size=file_size,
+                    download_url="",
+                )
+
+            attachment_id = payload.get("id")
+            return {
+                "success": True,
+                "attachment_id": attachment_id,
+                "filename": payload.get("filename", os.path.basename(resolved_path)),
+                "file_size": payload.get("file_size", file_size),
+                "mime_type": payload.get(
+                    "mime_type",
+                    mimetypes.guess_type(resolved_path)[0]
+                    or "application/octet-stream",
+                ),
+                "download_url": f"/api/attachments/{attachment_id}/download",
+                "message": "File uploaded successfully",
+                "execution_time": time.monotonic() - started_at,
+            }
+        except Exception as exc:
+            logger.error("[SandboxHandler] Device upload_attachment failed: %s", exc)
+            return self._error_response(
+                f"Failed to upload file: {exc}",
+                execution_time=time.monotonic() - started_at,
+                attachment_id=None,
+                filename=os.path.basename(resolved_path),
+                file_size=0,
+                download_url="",
+            )
+
+    def _normalize_path(self, path: str) -> str:
+        """Map sandbox-style paths onto the local device home directory."""
+        home_dir = os.path.expanduser("~")
+        normalized = os.path.expanduser(path)
+        if not os.path.isabs(normalized):
+            return os.path.join(home_dir, normalized)
+        if normalized == "/home/user":
+            return home_dir
+        if normalized.startswith("/home/user/"):
+            suffix = normalized[len("/home/user/") :]
+            return os.path.join(home_dir, suffix)
+        return normalized
+
+    def _collect_entries(self, root_path: str, depth: int) -> list[Dict[str, Any]]:
+        """Collect directory entries recursively up to the requested depth."""
+        entries: list[Dict[str, Any]] = []
+
+        def walk(current_path: str, remaining_depth: int) -> None:
+            with os.scandir(current_path) as iterator:
+                for entry in iterator:
+                    entry_path = entry.path
+                    stat_result = entry.stat(follow_symlinks=False)
+                    entries.append(
+                        {
+                            "name": entry.name,
+                            "path": entry_path,
+                            "type": self._entry_type(entry),
+                            "size": stat_result.st_size,
+                            "permissions": oct(stat_result.st_mode & 0o777),
+                            "owner": self._resolve_owner(stat_result.st_uid),
+                            "group": self._resolve_group(stat_result.st_gid),
+                            "modified_time": self._iso_mtime(entry_path),
+                            **(
+                                {"symlink_target": os.readlink(entry_path)}
+                                if entry.is_symlink()
+                                else {}
+                            ),
+                        }
+                    )
+                    if remaining_depth > 1 and entry.is_dir(follow_symlinks=False):
+                        walk(entry_path, remaining_depth - 1)
+
+        walk(root_path, depth)
+        return entries
+
+    def _entry_type(self, entry: os.DirEntry[str]) -> str:
+        """Return the normalized entry type."""
+        if entry.is_symlink():
+            return "symlink"
+        if entry.is_dir(follow_symlinks=False):
+            return "directory"
+        return "file"
+
+    def _resolve_owner(self, uid: int) -> str:
+        """Resolve an owner name from uid."""
+        try:
+            return pwd.getpwuid(uid).pw_name
+        except KeyError:
+            return str(uid)
+
+    def _resolve_group(self, gid: int) -> str:
+        """Resolve a group name from gid."""
+        try:
+            return grp.getgrgid(gid).gr_name
+        except KeyError:
+            return str(gid)
+
+    def _iso_mtime(self, path: str) -> str:
+        """Return an ISO timestamp for a file's modification time."""
+        return time.strftime(
+            "%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(path))
+        )
+
+    def _error_response(self, message: str, **kwargs: Any) -> Dict[str, Any]:
+        """Build a consistent sandbox handler error response."""
+        return {
+            "success": False,
+            "error": message,
+            **kwargs,
         }

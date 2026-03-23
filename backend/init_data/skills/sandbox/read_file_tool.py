@@ -137,6 +137,30 @@ Example:
             # Get sandbox manager from base class
             sandbox_manager = self._get_sandbox_manager()
 
+            await sandbox_manager.ensure_device_binding_loaded()
+            if sandbox_manager.is_device_backend_bound():
+                logger.info(
+                    "[SandboxReadFileTool] Reading file from bound device backend: %s",
+                    file_path,
+                )
+                response = await sandbox_manager.read_file_via_device(
+                    file_path=file_path,
+                    format=format or "text",
+                )
+                if response.get("success"):
+                    await self._emit_tool_status(
+                        "completed",
+                        f"File read successfully ({response.get('size', 0)} bytes)",
+                        response,
+                    )
+                else:
+                    await self._emit_tool_status(
+                        "failed",
+                        response.get("error", "Failed to read file"),
+                        response,
+                    )
+                return json.dumps(response, ensure_ascii=False, indent=2)
+
             # Get or create sandbox
             logger.info(f"[SandboxReadFileTool] Getting or creating sandbox...")
             sandbox, error = await sandbox_manager.get_or_create_sandbox(
