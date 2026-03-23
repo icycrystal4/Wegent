@@ -56,7 +56,9 @@ from app.api.endpoints.internal import bots_router as internal_bots_router
 from app.api.endpoints.internal import (
     callback_router,
     chat_storage_router,
-    devices_router as internal_devices_router,
+)
+from app.api.endpoints.internal import devices_router as internal_devices_router
+from app.api.endpoints.internal import (
     services_router,
     skills_router,
     subscriptions_router,
