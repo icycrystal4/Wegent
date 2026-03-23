@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     # Tool calling flow limits
     CHAT_TOOL_MAX_REQUESTS: int = 50
     CHAT_TOOL_MAX_TIME_SECONDS: float = 60.0
+    DEVICE_ROUTED_COMMANDS: str = "himalaya"
 
     # Group chat history configuration
     GROUP_CHAT_HISTORY_FIRST_MESSAGES: int = 10

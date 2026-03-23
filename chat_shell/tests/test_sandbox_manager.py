@@ -6,6 +6,7 @@
 
 import pytest
 
+from chat_shell.tools.sandbox import _base
 from chat_shell.tools.sandbox._base import SandboxManager
 
 
@@ -76,3 +77,15 @@ async def test_sandbox_manager_sticks_to_device_backend(monkeypatch):
         assert captured_payloads[1]["device_id"] == "device-1"
     finally:
         SandboxManager.remove_instance(794)
+
+
+def test_build_device_routed_command_pattern_uses_env(monkeypatch):
+    """Device-routed commands should be configurable via environment variables."""
+    monkeypatch.setenv("CHAT_SHELL_DEVICE_ROUTED_COMMANDS", "mail-cli,custom-tool")
+
+    pattern = _base._build_device_routed_command_pattern()
+
+    assert pattern.search("mail-cli --help")
+    assert pattern.search("command -v custom-tool")
+    assert pattern.search("which custom-tool")
+    assert not pattern.search("himalaya --help")

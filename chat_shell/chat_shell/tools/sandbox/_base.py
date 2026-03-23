@@ -39,9 +39,34 @@ DEVICE_DOWNLOAD_ATTACHMENT_ENDPOINT = (
 )
 DEVICE_UPLOAD_ATTACHMENT_ENDPOINT = "/api/internal/devices/sandbox/upload-attachment"
 DEVICE_BINDING_ENDPOINT_TEMPLATE = "/api/internal/devices/sandbox/binding/{task_id}"
-HIMALAYA_COMMAND_PATTERN = re.compile(
-    r"(^|\s)(himalaya|command\s+-v\s+himalaya|which\s+himalaya)(\s|$)"
-)
+DEFAULT_DEVICE_ROUTED_COMMANDS = "himalaya"
+
+
+def _build_device_routed_command_pattern() -> re.Pattern[str]:
+    """Build a regex for commands that should be routed to the device backend."""
+    raw_value = os.getenv(
+        "CHAT_SHELL_DEVICE_ROUTED_COMMANDS",
+        DEFAULT_DEVICE_ROUTED_COMMANDS,
+    )
+    command_names = [name.strip() for name in raw_value.split(",") if name.strip()]
+    if not command_names:
+        return re.compile(r"$^")
+
+    command_patterns: list[str] = []
+    for command_name in command_names:
+        escaped_name = re.escape(command_name)
+        command_patterns.extend(
+            [
+                escaped_name,
+                rf"command\s+-v\s+{escaped_name}",
+                rf"which\s+{escaped_name}",
+            ]
+        )
+
+    return re.compile(rf"(^|\s)({'|'.join(command_patterns)})(\s|$)")
+
+
+DEVICE_ROUTED_COMMAND_PATTERN = _build_device_routed_command_pattern()
 
 # E2B SDK patching - must be done before any e2b imports
 # Setup environment variables first
@@ -393,7 +418,7 @@ class SandboxManager:
     def should_use_device_backend_for_command(self, command: str) -> bool:
         """Return True when a command should prefer the device-backed executor."""
         return self.is_device_backend_bound() or bool(
-            HIMALAYA_COMMAND_PATTERN.search(command)
+            DEVICE_ROUTED_COMMAND_PATTERN.search(command)
         )
 
     def is_device_backend_bound(self) -> bool:
