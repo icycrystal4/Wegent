@@ -15,7 +15,6 @@ Use this skill to run email workflows through the `himalaya` CLI with a safety-f
 ## Inputs To Confirm Up Front
 
 Before running anything beyond `--help`, ask for or infer (then confirm) these:
-- Config path: default `~/.wegent-executor/mail/config.toml`
 - Account: which configured account to use (if more than one)
 - Folder/mailbox: default should be explicit (e.g. `INBOX`)
 - Scope limits: default list size (e.g. 20) and whether to include message bodies
@@ -24,19 +23,34 @@ Before running anything beyond `--help`, ask for or infer (then confirm) these:
 
 ## Workflow
 
+Before running any bundled script, resolve the injected base directory from the leading line:
+- `Base directory for this skill: <absolute-path>`
+
+Then define these shell helpers once and reuse them in all subsequent commands:
+
+```bash
+SKILL_BASE_DIR="<absolute-path-from-Base-directory-line>"
+HIMALAYA_CLI="bash \"$SKILL_BASE_DIR/scripts/himalaya-cli.sh\""
+CHECK_HIMALAYA="bash \"$SKILL_BASE_DIR/scripts/check_himalaya.sh\""
+```
+
+In the examples below, assume those helpers are already defined.
+
 ### 1. Resolve Config Source First
 
 Prefer private local config files instead of repository-stored credentials.
 
-Use this config path (default):
-
 ```bash
-himalaya -c ~/.wegent-executor/mail/config.toml account list
+$HIMALAYA_CLI account list
 ```
+If the output contains `WEGENT_ACTION_REQUIRED={"action":"himalaya_mail_config"...}`:
+- Do not retry the command.
+- Do not ask the user to paste the password into chat.
+- Reply in the user's language with a short explanation and include a clickable scheme link to open the config dialog, for example:
 
-Treat `.wegent-executor/mail/config.toml` as `$HOME/.wegent-executor/mail/config.toml`.
-
-Always run commands with `-c ~/.wegent-executor/mail/config.toml` unless the user explicitly asks for another config path.
+```markdown
+请先完成邮箱配置：[配置邮箱](wegent://modal/himalaya-mail-config)
+```
 
 ### 1.1 Resolve Real Folder Names (Critical For Non-English Mailboxes)
 
@@ -50,8 +64,8 @@ First, discover the folder-list subcommand via local help (see step 2). Then lis
 Himalaya command structures can vary by version. Always inspect local help before execution:
 
 ```bash
-himalaya --help
-himalaya <subcommand> --help
+$HIMALAYA_CLI --help
+$HIMALAYA_CLI <subcommand> --help
 ```
 
 For nested commands, continue drilling down until flags and required args are explicit.
@@ -74,8 +88,8 @@ For operations that may send externally, delete, move, expunge, or mutate messag
 3. Execute only confirmed IDs.
 
 ```bash
-himalaya -c ~/.wegent-executor/mail/config.toml envelope list -a <account> -f <folder> -s 20
-himalaya -c ~/.wegent-executor/mail/config.toml message <destructive-subcommand> -a <account> -f <folder> <id...>
+$HIMALAYA_CLI envelope list -a <account> -f <folder> -s 20
+$HIMALAYA_CLI message <destructive-subcommand> -a <account> -f <folder> <id...>
 ```
 
 Confirmation prompt template (use literally, and wait for user response):
@@ -104,16 +118,16 @@ After command execution, return:
 - Default for AI-authored emails: generate then send via templates (pre-fills correct `From:` from config):
 
 ```bash
-himalaya -c ~/.wegent-executor/mail/config.toml template write -a <account> \
+$HIMALAYA_CLI template write -a <account> \
   -H 'To: <...>' -H 'Subject: ...' 'body...' \
-| himalaya -c ~/.wegent-executor/mail/config.toml template send -a <account>
+| $HIMALAYA_CLI template send -a <account>
 ```
 
 - Always pass `-a <account>` for compose/send.
-- Do not use `himalaya message send` unless the user explicitly asks to send a raw RFC5322/MIME message; then validate `From:` exactly matches the selected account `email = "..."` from `~/.wegent-executor/mail/config.toml` (no typos, no missing TLD).
+- Do not use `himalaya message send` unless the user explicitly asks to send a raw RFC5322/MIME message; then validate `From:` exactly matches the selected account `email = "..."` from the resolved config file (no typos, no missing TLD).
 
 ## Common Failure Handling
 
-- Basic sanity: `command -v himalaya`, `himalaya --version`, `himalaya --help`.
-- Config/auth/network: show the exact CLI error; confirm `-c ~/.wegent-executor/mail/config.toml` and `-a <account>` are correct.
-- Diagnose: `himalaya -c ~/.wegent-executor/mail/config.toml account doctor <account>`.
+- Basic sanity: `$CHECK_HIMALAYA`, `$HIMALAYA_CLI --version`, `$HIMALAYA_CLI --help`.
+- Config/auth/network: show the exact CLI error; confirm the resolved config path and `-a <account>` are correct.
+- Diagnose: `$HIMALAYA_CLI account doctor <account>`.
