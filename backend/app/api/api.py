@@ -56,6 +56,7 @@ from app.api.endpoints.internal import bots_router as internal_bots_router
 from app.api.endpoints.internal import (
     callback_router,
     chat_storage_router,
+    devices_router as internal_devices_router,
     services_router,
     skills_router,
     subscriptions_router,
@@ -175,6 +176,9 @@ if not settings.STANDALONE_MODE:
 
 api_router.include_router(skills_router, prefix="/internal", tags=["internal-skills"])
 api_router.include_router(tables_router, prefix="/internal", tags=["internal-tables"])
+api_router.include_router(
+    internal_devices_router, prefix="/internal", tags=["internal-devices"]
+)
 api_router.include_router(
     internal_bots_router, prefix="/internal", tags=["internal-bots"]
 )
