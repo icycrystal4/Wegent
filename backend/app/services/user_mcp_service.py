@@ -117,6 +117,42 @@ class UserMCPService:
         return mcps
 
     @staticmethod
+    def get_enabled_decrypted_mcp_preferences(
+        preferences: str | dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Return only enabled MCP services with decrypted URLs."""
+        mcps = UserMCPService.get_decrypted_mcp_preferences(preferences)
+        enabled_mcps: dict[str, Any] = {}
+
+        for provider_id, provider in mcps.items():
+            services = provider.get(MCP_SERVICES_KEY)
+            if not isinstance(services, dict):
+                continue
+
+            enabled_services: dict[str, Any] = {}
+            for service_id, service in services.items():
+                if not isinstance(service, dict):
+                    continue
+
+                if not service.get("enabled"):
+                    continue
+
+                credentials = service.get(MCP_CREDENTIALS_KEY)
+                url = credentials.get(MCP_URL_KEY) if isinstance(credentials, dict) else ""
+                if not isinstance(url, str) or not url.strip():
+                    continue
+
+                enabled_services[service_id] = service
+
+            if enabled_services:
+                enabled_mcps[provider_id] = {
+                    **provider,
+                    MCP_SERVICES_KEY: enabled_services,
+                }
+
+        return enabled_mcps
+
+    @staticmethod
     def get_enabled_mcp_server(
         preferences: str | dict[str, Any] | None,
         provider_id: str,

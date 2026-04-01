@@ -1278,7 +1278,9 @@ class TaskRequestBuilder:
             return None
 
         preferences = getattr(user, "preferences", None)
-        user_mcps = user_mcp_service.get_decrypted_mcp_preferences(preferences)
+        user_mcps = user_mcp_service.get_enabled_decrypted_mcp_preferences(
+            preferences
+        )
         if not user_mcps:
             return None
 
@@ -1312,7 +1314,14 @@ class TaskRequestBuilder:
         if skill_crd.spec.mcpServers:
             skill_data["mcpServers"] = skill_crd.spec.mcpServers
 
-        runtime_service = get_mcp_service_by_skill_name(skill_crd.metadata.name)
+        is_public_default_runtime_skill = (
+            skill.user_id == 0 and skill_crd.metadata.namespace == "default"
+        )
+        runtime_service = (
+            get_mcp_service_by_skill_name(skill_crd.metadata.name)
+            if is_public_default_runtime_skill
+            else None
+        )
         if runtime_service:
             provider, service = runtime_service
             configured_server = None
@@ -1883,6 +1892,10 @@ Response template:
         url = server.get("url", "")
         if not url:
             return False
+
+        # Runtime placeholders are resolved after request build.
+        if "${{" in url and "}}" in url:
+            return True
 
         # URLs pointing to our own backend are always reachable.
         # Checking them with a synchronous HTTP request would deadlock

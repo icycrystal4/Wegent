@@ -42,6 +42,40 @@ class TestUserScopedMcpInjection:
             }
         }
 
+    def test_build_request_task_data_filters_disabled_services(self):
+        preferences = user_mcp_service.set_provider_service_config(
+            None,
+            provider_id="dingtalk",
+            service_id="docs",
+            enabled=True,
+            url="https://example.com/mcp?token=secret",
+        )
+        preferences = user_mcp_service.set_provider_service_config(
+            preferences,
+            provider_id="dingtalk",
+            service_id="ai_table",
+            enabled=False,
+            url="https://example.com/table?token=secret",
+        )
+        user = SimpleNamespace(preferences=user_mcp_service.dump_preferences(preferences))
+
+        task_data = TaskRequestBuilder._build_request_task_data(user)
+
+        assert task_data == {
+            "user_mcps": {
+                "dingtalk": {
+                    "services": {
+                        "docs": {
+                            "enabled": True,
+                            "credentials": {
+                                "url": "https://example.com/mcp?token=secret"
+                            },
+                        }
+                    }
+                }
+            }
+        }
+
     def test_injects_service_skill_when_message_mentions_provider_and_service_missing(
         self, test_db
     ):
@@ -220,6 +254,42 @@ class TestUserScopedMcpInjection:
         assert "wegent://modal/mcp-provider-config?provider=dingtalk&service=docs" in (
             skill_data["prompt"]
         )
+
+    def test_build_skill_data_does_not_rewrite_non_public_skill_named_like_runtime_skill(
+        self, test_db
+    ):
+        builder = TaskRequestBuilder(test_db)
+        skill = SimpleNamespace(
+            id=301,
+            user_id=7,
+            json={
+                "kind": "Skill",
+                "metadata": {"name": "dingtalk-docs", "namespace": "workspace-team"},
+                "spec": {
+                    "description": "Custom skill",
+                    "prompt": "Custom prompt.",
+                    "bindShells": ["Chat"],
+                    "mcpServers": {
+                        "docs": {
+                            "type": "streamable-http",
+                            "url": "http://custom.example.com/mcp",
+                        }
+                    },
+                },
+            },
+        )
+
+        skill_data = builder._build_skill_data(
+            skill, user=SimpleNamespace(preferences="{}")
+        )
+
+        assert skill_data["prompt"] == "Custom prompt."
+        assert skill_data["mcpServers"] == {
+            "docs": {
+                "type": "streamable-http",
+                "url": "http://custom.example.com/mcp",
+            }
+        }
 
     def test_get_bot_skills_resolves_public_user_preload_skill(self, test_db, mocker):
         builder = TaskRequestBuilder(test_db)

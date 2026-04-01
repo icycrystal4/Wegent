@@ -73,6 +73,39 @@ class TestUserMCPService:
             }
         }
 
+    def test_get_enabled_decrypted_mcp_preferences_filters_disabled_services(self):
+        preferences = user_mcp_service.set_provider_service_config(
+            None,
+            provider_id="dingtalk",
+            service_id="docs",
+            enabled=True,
+            url="https://example.com/mcp?token=secret",
+        )
+        preferences = user_mcp_service.set_provider_service_config(
+            preferences,
+            provider_id="dingtalk",
+            service_id="ai_table",
+            enabled=False,
+            url="https://example.com/table?token=secret",
+        )
+
+        decrypted = user_mcp_service.get_enabled_decrypted_mcp_preferences(
+            json.dumps(preferences)
+        )
+
+        assert decrypted == {
+            "dingtalk": {
+                "services": {
+                    "docs": {
+                        "enabled": True,
+                        "credentials": {
+                            "url": "https://example.com/mcp?token=secret"
+                        },
+                    }
+                }
+            }
+        }
+
     def test_list_mcp_servers_returns_enabled_services_only(self):
         preferences = user_mcp_service.set_provider_service_config(
             None,
