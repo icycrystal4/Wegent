@@ -442,7 +442,7 @@ class TestResolveRequestPreloadSkills:
             request=request,
             bot=bot,
             team=team,
-            user_id=7,
+            user=SimpleNamespace(id=7, preferences="{}"),
         )
 
         assert result.skill_names == ["browser", "wegent-knowledge"]

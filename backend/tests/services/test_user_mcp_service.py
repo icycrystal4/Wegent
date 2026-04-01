@@ -47,6 +47,32 @@ class TestUserMCPService:
             "url": "https://example.com/mcp?token=secret",
         }
 
+    def test_get_decrypted_mcp_preferences_keeps_structure_and_decrypts_url(self):
+        preferences = user_mcp_service.set_provider_service_config(
+            None,
+            provider_id="dingtalk",
+            service_id="docs",
+            enabled=True,
+            url="https://example.com/mcp?token=secret",
+        )
+
+        decrypted = user_mcp_service.get_decrypted_mcp_preferences(
+            json.dumps(preferences)
+        )
+
+        assert decrypted == {
+            "dingtalk": {
+                "services": {
+                    "docs": {
+                        "enabled": True,
+                        "credentials": {
+                            "url": "https://example.com/mcp?token=secret"
+                        },
+                    }
+                }
+            }
+        }
+
     def test_list_mcp_servers_returns_enabled_services_only(self):
         preferences = user_mcp_service.set_provider_service_config(
             None,
@@ -65,3 +91,34 @@ class TestUserMCPService:
                 "type": "streamable-http",
             }
         ]
+
+    def test_get_enabled_mcp_server_returns_none_when_service_not_ready(self):
+        assert (
+            user_mcp_service.get_enabled_mcp_server(
+                None,
+                "dingtalk",
+                "docs",
+            )
+            is None
+        )
+
+    def test_get_enabled_mcp_server_returns_runtime_server_when_enabled(self):
+        preferences = user_mcp_service.set_provider_service_config(
+            None,
+            provider_id="dingtalk",
+            service_id="docs",
+            enabled=True,
+            url="https://example.com/mcp?token=secret",
+        )
+
+        server = user_mcp_service.get_enabled_mcp_server(
+            preferences,
+            "dingtalk",
+            "docs",
+        )
+
+        assert server == {
+            "name": "dingtalk_docs",
+            "url": "https://example.com/mcp?token=secret",
+            "type": "streamable-http",
+        }
