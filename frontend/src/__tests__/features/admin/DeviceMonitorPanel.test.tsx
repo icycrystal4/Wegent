@@ -43,16 +43,21 @@ jest.mock('@/components/ui/tooltip', () => ({
 }))
 
 jest.mock('@/components/ui/select', () => {
+  type MockSelectChildProps = {
+    children?: React.ReactNode
+    value?: string
+  }
+
   const collectOptions = (children: React.ReactNode): Array<{ value: string; label: React.ReactNode }> => {
     const options: Array<{ value: string; label: React.ReactNode }> = []
 
     React.Children.forEach(children, child => {
-      if (!React.isValidElement(child)) {
+      if (!React.isValidElement<MockSelectChildProps>(child)) {
         return
       }
 
       if ((child.type as { displayName?: string }).displayName === 'MockSelectItem') {
-        options.push({ value: child.props.value as string, label: child.props.children })
+        options.push({ value: child.props.value ?? '', label: child.props.children })
       }
 
       if (child.props.children) {
@@ -73,16 +78,16 @@ jest.mock('@/components/ui/select', () => {
     }
   ): React.ReactNode =>
     React.Children.map(children, child => {
-      if (!React.isValidElement(child)) {
+      if (!React.isValidElement<MockSelectChildProps>(child)) {
         return child
       }
 
       if ((child.type as { displayName?: string }).displayName === 'MockSelectTrigger') {
-        return React.cloneElement(child, props)
+        return React.cloneElement(child as React.ReactElement<typeof props>, props)
       }
 
       if (child.props.children) {
-        return React.cloneElement(child, {
+        return React.cloneElement(child as React.ReactElement<MockSelectChildProps>, {
           children: injectTriggerProps(child.props.children, props),
         })
       }

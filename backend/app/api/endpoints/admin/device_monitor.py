@@ -382,7 +382,9 @@ async def get_all_devices(
         for kind in page_kinds:
             spec = kind.json.get("spec", {}) if kind.json else {}
             device_id = spec.get("deviceId", kind.name)
-            redis_key = local_device_provider.generate_online_key(kind.user_id, device_id)
+            redis_key = local_device_provider.generate_online_key(
+                kind.user_id, device_id
+            )
             online_info = online_info_map.get(redis_key)
 
             device_info = _build_device_info(kind, users_map, online_info)
