@@ -6,8 +6,8 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 from typing import Any
 
 from app.services.mcp_provider_registry import (
@@ -138,7 +138,11 @@ class UserMCPService:
                     continue
 
                 credentials = service.get(MCP_CREDENTIALS_KEY)
-                url = credentials.get(MCP_URL_KEY) if isinstance(credentials, dict) else ""
+                url = (
+                    credentials.get(MCP_URL_KEY)
+                    if isinstance(credentials, dict)
+                    else ""
+                )
                 if not isinstance(url, str) or not url.strip():
                     continue
 

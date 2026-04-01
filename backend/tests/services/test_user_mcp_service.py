@@ -65,9 +65,7 @@ class TestUserMCPService:
                 "services": {
                     "docs": {
                         "enabled": True,
-                        "credentials": {
-                            "url": "https://example.com/mcp?token=secret"
-                        },
+                        "credentials": {"url": "https://example.com/mcp?token=secret"},
                     }
                 }
             }
@@ -98,9 +96,7 @@ class TestUserMCPService:
                 "services": {
                     "docs": {
                         "enabled": True,
-                        "credentials": {
-                            "url": "https://example.com/mcp?token=secret"
-                        },
+                        "credentials": {"url": "https://example.com/mcp?token=secret"},
                     }
                 }
             }

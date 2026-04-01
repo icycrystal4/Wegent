@@ -20,7 +20,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.subtask import Subtask
 from app.models.task import TaskResource
-from app.schemas.kind import Bot, Ghost, Shell, Skill as SkillCRD, Team
+from app.schemas.kind import Bot, Ghost, Shell
+from app.schemas.kind import Skill as SkillCRD
+from app.schemas.kind import Team
 from app.services.auth import create_skill_identity_token
 from app.services.mcp_provider_registry import (
     get_mcp_service_by_skill_name,
@@ -1278,9 +1280,7 @@ class TaskRequestBuilder:
             return None
 
         preferences = getattr(user, "preferences", None)
-        user_mcps = user_mcp_service.get_enabled_decrypted_mcp_preferences(
-            preferences
-        )
+        user_mcps = user_mcp_service.get_enabled_decrypted_mcp_preferences(preferences)
         if not user_mcps:
             return None
 

@@ -57,7 +57,9 @@ class TestUserScopedMcpInjection:
             enabled=False,
             url="https://example.com/table?token=secret",
         )
-        user = SimpleNamespace(preferences=user_mcp_service.dump_preferences(preferences))
+        user = SimpleNamespace(
+            preferences=user_mcp_service.dump_preferences(preferences)
+        )
 
         task_data = TaskRequestBuilder._build_request_task_data(user)
 
@@ -118,12 +120,10 @@ class TestUserScopedMcpInjection:
                 "name": "dingtalk-ai-table",
                 "namespace": "default",
                 "is_public": True,
-            }
+            },
         ]
 
-    def test_injects_runtime_skill_when_matching_service_is_ready(
-        self, test_db
-    ):
+    def test_injects_runtime_skill_when_matching_service_is_ready(self, test_db):
         builder = TaskRequestBuilder(test_db)
         preferences = user_mcp_service.dump_preferences(
             user_mcp_service.set_provider_service_config(
@@ -150,9 +150,7 @@ class TestUserScopedMcpInjection:
             }
         ]
 
-    def test_does_not_inject_other_service_when_target_service_matches(
-        self, test_db
-    ):
+    def test_does_not_inject_other_service_when_target_service_matches(self, test_db):
         builder = TaskRequestBuilder(test_db)
         preferences = user_mcp_service.dump_preferences(
             user_mcp_service.set_provider_service_config(
@@ -317,9 +315,7 @@ class TestUserScopedMcpInjection:
                 },
             },
         )
-        skill = SimpleNamespace(
-            name="dingtalk-docs", user_id=0, namespace="default"
-        )
+        skill = SimpleNamespace(name="dingtalk-docs", user_id=0, namespace="default")
 
         mock_query = mocker.Mock()
         mock_query.filter.return_value.first.return_value = ghost
