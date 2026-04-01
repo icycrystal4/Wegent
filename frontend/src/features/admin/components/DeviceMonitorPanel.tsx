@@ -42,10 +42,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn, isVersionAtLeast } from '@/lib/utils'
+import { cn, isCompleteVersionString, isVersionAtLeast } from '@/lib/utils'
 
 // Minimum version required for auto-upgrade support
 const MIN_AUTO_UPGRADE_VERSION = '1.6.5'
+const FILTER_DEBOUNCE_MS = 600
 
 interface StatCardProps {
   title: string
@@ -144,36 +145,56 @@ export function DeviceMonitorPanel() {
   const [deviceTypeFilter, setDeviceTypeFilter] = useState<string>('all')
   const [bindShellFilter, setBindShellFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [versionFilterOp, setVersionFilterOp] = useState<VersionFilterOperator>('gte')
+  const [versionFilterOp, setVersionFilterOp] = useState<VersionFilterOperator>('lt')
   const [versionFilter, setVersionFilter] = useState('')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [debouncedVersionFilter, setDebouncedVersionFilter] = useState('')
+  const [appliedVersionFilter, setAppliedVersionFilter] = useState('')
   const [page, setPage] = useState(1)
   const limit = 20
-
-  // Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setPage(1)
-      setDebouncedSearch(search)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [search])
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setPage(1)
-      setDebouncedVersionFilter(versionFilter)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [versionFilter])
 
   useEffect(() => {
     if (statusFilter === 'offline' && versionFilter) {
       setVersionFilter('')
     }
   }, [statusFilter, versionFilter])
+
+  const applySearchFilter = useCallback(() => {
+    setPage(1)
+    setDebouncedSearch(search.trim())
+  }, [search])
+
+  const applyVersionFilter = useCallback(() => {
+    const normalizedVersion = versionFilter.trim()
+
+    if (!normalizedVersion) {
+      setPage(1)
+      setAppliedVersionFilter('')
+      return
+    }
+
+    if (!isCompleteVersionString(normalizedVersion)) {
+      return
+    }
+
+    setPage(1)
+    setAppliedVersionFilter(normalizedVersion)
+  }, [versionFilter])
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      applySearchFilter()
+    }, FILTER_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [applySearchFilter])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      applyVersionFilter()
+    }, FILTER_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [applyVersionFilter])
 
   const loadStats = useCallback(async () => {
     setIsStatsLoading(true)
@@ -199,8 +220,7 @@ export function DeviceMonitorPanel() {
       const bindShell = bindShellFilter === 'all' ? undefined : (bindShellFilter as BindShell)
       const status = statusFilter === 'all' ? undefined : (statusFilter as DeviceStatus)
       const searchTerm = debouncedSearch.trim() || undefined
-      const normalizedVersion = debouncedVersionFilter.trim()
-      const version = statusFilter === 'offline' ? undefined : (normalizedVersion || undefined)
+      const version = statusFilter === 'offline' ? undefined : (appliedVersionFilter || undefined)
 
       const data = await adminApis.getDevices(
         page,
@@ -229,7 +249,7 @@ export function DeviceMonitorPanel() {
         setHasLoadedDevices(true)
       }
     }
-  }, [page, statusFilter, deviceTypeFilter, bindShellFilter, debouncedSearch, debouncedVersionFilter, versionFilterOp, t])
+  }, [page, statusFilter, deviceTypeFilter, bindShellFilter, debouncedSearch, appliedVersionFilter, versionFilterOp, t])
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
@@ -395,8 +415,8 @@ export function DeviceMonitorPanel() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
+      <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap">
+        <div className="relative flex-1 lg:min-w-[280px]">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-text-muted" />
           <Input
             placeholder={t('admin:device_monitor.search_placeholder')}
@@ -413,7 +433,10 @@ export function DeviceMonitorPanel() {
             setStatusFilter(value)
           }}
         >
-          <SelectTrigger className="w-[140px]" data-testid="device-status-filter-select">
+          <SelectTrigger
+            className="w-full sm:w-[140px]"
+            data-testid="device-status-filter-select"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -430,7 +453,7 @@ export function DeviceMonitorPanel() {
             setDeviceTypeFilter(value)
           }}
         >
-          <SelectTrigger className="w-[140px]" data-testid="device-type-filter-select">
+          <SelectTrigger className="w-full sm:w-[140px]" data-testid="device-type-filter-select">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -446,7 +469,7 @@ export function DeviceMonitorPanel() {
             setBindShellFilter(value)
           }}
         >
-          <SelectTrigger className="w-[160px]" data-testid="bind-shell-filter-select">
+          <SelectTrigger className="w-full sm:w-[160px]" data-testid="bind-shell-filter-select">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -459,7 +482,7 @@ export function DeviceMonitorPanel() {
             </SelectItem>
           </SelectContent>
         </Select>
-        <div className="flex gap-2 sm:w-auto">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <Select
             value={versionFilterOp}
             onValueChange={value => {
@@ -468,7 +491,10 @@ export function DeviceMonitorPanel() {
             }}
             disabled={statusFilter === 'offline'}
           >
-            <SelectTrigger className="w-[120px]" data-testid="version-operator-filter-select">
+            <SelectTrigger
+              className="w-full sm:w-[120px]"
+              data-testid="version-operator-filter-select"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -483,7 +509,7 @@ export function DeviceMonitorPanel() {
             placeholder={t('admin:device_monitor.version_filter.placeholder')}
             value={versionFilter}
             onChange={e => setVersionFilter(e.target.value)}
-            className="sm:w-[160px]"
+            className="w-full sm:w-[220px]"
             data-testid="version-filter-input"
             disabled={statusFilter === 'offline'}
           />

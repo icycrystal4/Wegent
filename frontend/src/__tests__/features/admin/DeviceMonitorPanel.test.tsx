@@ -4,9 +4,10 @@
 
 import '@testing-library/jest-dom'
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import DeviceMonitorPanel from '@/features/admin/components/DeviceMonitorPanel'
 import { adminApis } from '@/apis/admin'
+import { toast } from 'sonner'
 
 const mockT = (key: string) => key
 
@@ -149,6 +150,7 @@ jest.mock('@/components/ui/select', () => {
 
 describe('DeviceMonitorPanel', () => {
   const mockedAdminApis = adminApis as jest.Mocked<typeof adminApis>
+  const mockedToast = toast as jest.Mocked<typeof toast>
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -197,7 +199,7 @@ describe('DeviceMonitorPanel', () => {
 
     await waitFor(() => {
       expect(mockedAdminApis.getDevices).toHaveBeenCalledTimes(2)
-    }, { timeout: 1000 })
+    }, { timeout: 1200 })
 
     expect(mockedAdminApis.getDeviceStats).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('device-card-device-1')).toBeInTheDocument()
@@ -216,7 +218,7 @@ describe('DeviceMonitorPanel', () => {
 
     await waitFor(() => {
       expect(mockedAdminApis.getDevices).toHaveBeenCalledTimes(2)
-    }, { timeout: 1000 })
+    }, { timeout: 1200 })
 
     expect(mockedAdminApis.getDevices).toHaveBeenLastCalledWith(
       1,
@@ -225,10 +227,29 @@ describe('DeviceMonitorPanel', () => {
       undefined,
       undefined,
       undefined,
-      'gte',
+      'lt',
       '1.6.5'
     )
     expect(mockedAdminApis.getDeviceStats).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not send incomplete version filters while typing', async () => {
+    render(<DeviceMonitorPanel />)
+
+    await waitFor(() => {
+      expect(mockedAdminApis.getDevices).toHaveBeenCalledTimes(1)
+    })
+
+    fireEvent.change(screen.getByTestId('version-filter-input'), {
+      target: { value: '1.' },
+    })
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 700))
+    })
+
+    expect(mockedAdminApis.getDevices).toHaveBeenCalledTimes(1)
+    expect(mockedToast.error).not.toHaveBeenCalled()
   })
 
   it('disables version filter when offline status is selected', async () => {
@@ -244,7 +265,7 @@ describe('DeviceMonitorPanel', () => {
 
     await waitFor(() => {
       expect(mockedAdminApis.getDevices).toHaveBeenCalledTimes(2)
-    }, { timeout: 1000 })
+    }, { timeout: 1200 })
 
     expect(screen.getByTestId('version-filter-input')).toBeDisabled()
     expect(mockedAdminApis.getDevices).toHaveBeenLastCalledWith(
