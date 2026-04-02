@@ -5,12 +5,11 @@
 """
 Tests for Claude Code MCP processing in TaskRequestBuilder.
 
-Verifies that skill MCP extraction, type normalization, and reachability
-filtering work correctly when preparing MCP servers for Claude Code executor.
+Verifies that skill MCP extraction and type normalization work correctly when
+preparing MCP servers for the Claude Code executor.
 """
 
 from types import SimpleNamespace
-from unittest.mock import patch
 
 from app.services.execution.request_builder import TaskRequestBuilder
 from shared.models.execution import ExecutionRequest
@@ -198,86 +197,10 @@ class TestNormalizeMcpTypesForClaudeCode:
         assert servers[1] == "not-a-dict"
 
 
-class TestCheckMcpServerReachable:
-    """Tests for _check_mcp_server_reachable static method."""
-
-    def test_no_url_returns_false(self):
-        assert TaskRequestBuilder._check_mcp_server_reachable({}) is False
-
-    def test_empty_url_returns_false(self):
-        assert TaskRequestBuilder._check_mcp_server_reachable({"url": ""}) is False
-
-    @patch("app.services.execution.request_builder.urllib.request.urlopen")
-    def test_successful_response_returns_true(self, mock_urlopen):
-        server = {"url": "http://mcp.example.com/server", "type": "http"}
-        result = TaskRequestBuilder._check_mcp_server_reachable(server)
-        assert result is True
-
-    @patch(
-        "app.services.execution.request_builder.urllib.request.urlopen",
-        side_effect=Exception("Connection refused"),
-    )
-    def test_connection_error_returns_false(self, mock_urlopen):
-        server = {"url": "http://192.0.2.1:9999/unreachable", "type": "http"}
-        result = TaskRequestBuilder._check_mcp_server_reachable(server)
-        assert result is False
-
-    def test_skips_placeholder_headers(self):
-        """Headers with ${{...}} placeholders should not be sent."""
-        import urllib.request
-
-        server = {
-            "url": "http://mcp.example.com/server",
-            "headers": {
-                "mcp-proxy-wegent-user": "${{user.name}}",
-                "X-Static": "fixed-value",
-            },
-        }
-        with patch(
-            "app.services.execution.request_builder.urllib.request.urlopen"
-        ) as mock_urlopen:
-            TaskRequestBuilder._check_mcp_server_reachable(server)
-            # Verify the request was made
-            assert mock_urlopen.called
-            req = mock_urlopen.call_args[0][0]
-            # Static header should be present, placeholder should not
-            assert req.get_header("X-static") == "fixed-value"
-            assert req.get_header("Mcp-proxy-wegent-user") is None
-
-
-class TestFilterReachableMcpServers:
-    """Tests for _filter_reachable_mcp_servers."""
-
-    def test_empty_list_returns_empty(self):
-        builder = TaskRequestBuilder.__new__(TaskRequestBuilder)
-        assert builder._filter_reachable_mcp_servers([]) == []
-
-    @patch.object(
-        TaskRequestBuilder,
-        "_check_mcp_server_reachable",
-        side_effect=lambda s: s.get("name") != "bad-server",
-    )
-    def test_filters_unreachable(self, mock_check):
-        builder = TaskRequestBuilder.__new__(TaskRequestBuilder)
-        servers = [
-            {"name": "good-server", "type": "http", "url": "http://good.example.com"},
-            {"name": "bad-server", "type": "http", "url": "http://bad.example.com"},
-        ]
-        result = builder._filter_reachable_mcp_servers(servers)
-
-        assert len(result) == 1
-        assert result[0]["name"] == "good-server"
-
-
 class TestPrepareMcpForClaudeCode:
     """Integration tests for _prepare_mcp_for_claude_code."""
 
-    @patch.object(
-        TaskRequestBuilder,
-        "_check_mcp_server_reachable",
-        return_value=True,
-    )
-    def test_skill_mcp_merged_and_normalized(self, mock_check):
+    def test_skill_mcp_merged_and_normalized(self):
         builder = TaskRequestBuilder.__new__(TaskRequestBuilder)
         bot_config = {
             "shell_type": "ClaudeCode",
@@ -312,12 +235,7 @@ class TestPrepareMcpForClaudeCode:
         for s in mcp:
             assert s["type"] == "http"
 
-    @patch.object(
-        TaskRequestBuilder,
-        "_check_mcp_server_reachable",
-        return_value=True,
-    )
-    def test_skill_mcp_only_no_ghost(self, mock_check):
+    def test_skill_mcp_only_no_ghost(self):
         builder = TaskRequestBuilder.__new__(TaskRequestBuilder)
         bot_config = {"shell_type": "ClaudeCode", "mcp_servers": []}
         skill_configs = [
@@ -338,20 +256,15 @@ class TestPrepareMcpForClaudeCode:
         assert bot_config["mcp_servers"][0]["name"] == "my-skill_server1"
         assert bot_config["mcp_servers"][0]["type"] == "http"
 
-    @patch.object(
-        TaskRequestBuilder,
-        "_check_mcp_server_reachable",
-        return_value=False,
-    )
-    def test_unreachable_servers_removed(self, mock_check):
+    def test_empty_url_servers_removed(self):
         builder = TaskRequestBuilder.__new__(TaskRequestBuilder)
         bot_config = {
             "shell_type": "ClaudeCode",
             "mcp_servers": [
                 {
-                    "name": "unreachable",
+                    "name": "empty-url-server",
                     "type": "http",
-                    "url": "http://192.0.2.1:9999/mcp",
+                    "url": "",
                 },
             ],
         }
@@ -388,12 +301,7 @@ class TestPrepareMcpForClaudeCode:
             }
         ]
 
-    @patch.object(
-        TaskRequestBuilder,
-        "_check_mcp_server_reachable",
-        return_value=True,
-    )
-    def test_no_skill_configs_preserves_ghost(self, mock_check):
+    def test_no_skill_configs_preserves_ghost(self):
         builder = TaskRequestBuilder.__new__(TaskRequestBuilder)
         bot_config = {
             "shell_type": "ClaudeCode",
@@ -415,12 +323,7 @@ class TestPrepareMcpForClaudeCode:
 class TestResolveRequestPreloadSkills:
     """Tests for late skill resolution after context processing."""
 
-    @patch.object(
-        TaskRequestBuilder,
-        "_check_mcp_server_reachable",
-        return_value=True,
-    )
-    def test_selected_kb_skill_resolves_into_request_and_claude_mcp(self, mock_check):
+    def test_selected_kb_skill_resolves_into_request_and_claude_mcp(self):
         builder = TaskRequestBuilder.__new__(TaskRequestBuilder)
         request = ExecutionRequest(
             task_id=1273,

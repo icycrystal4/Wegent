@@ -11,7 +11,6 @@ providing complete Bot, Model, Ghost, Shell, and Skill resolution.
 """
 
 import logging
-import urllib.request
 from typing import Any, List, Optional, Union
 
 from pydantic import BaseModel
@@ -29,7 +28,6 @@ from app.services.mcp_provider_registry import (
     list_mcp_providers,
 )
 from app.services.readers import KindType, kindReader
-from app.services.skill_resolution import find_skill_by_name, find_skill_by_ref
 from app.services.user_mcp_service import user_mcp_service
 from shared.models import ExecutionRequest
 from shared.models.db import Kind, User
@@ -1112,11 +1110,52 @@ class TaskRequestBuilder:
         Returns:
             Skill Kind object or None if not found
         """
-        return find_skill_by_name(
-            self.db,
-            skill_name=skill_name,
-            owner_user_id=team.user_id,
-            team_namespace=team.namespace or "default",
+        # Get team namespace for group-level skill lookup
+        team_namespace = team.namespace if team.namespace else "default"
+
+        # 1. User's personal skill (default namespace)
+        skill = (
+            self.db.query(Kind)
+            .filter(
+                Kind.user_id == team.user_id,
+                Kind.kind == "Skill",
+                Kind.name == skill_name,
+                Kind.namespace == "default",
+                Kind.is_active == True,  # noqa: E712
+            )
+            .first()
+        )
+
+        if skill:
+            return skill
+
+        # 2. Group-level skill (team's namespace) - search ALL skills in namespace
+        # This allows any team member's skill to be used by other members
+        if team_namespace != "default":
+            skill = (
+                self.db.query(Kind)
+                .filter(
+                    Kind.kind == "Skill",
+                    Kind.name == skill_name,
+                    Kind.namespace == team_namespace,
+                    Kind.is_active == True,  # noqa: E712
+                )
+                .first()
+            )
+
+            if skill:
+                return skill
+
+        # 3. Public skill (user_id=0)
+        return (
+            self.db.query(Kind)
+            .filter(
+                Kind.user_id == 0,
+                Kind.kind == "Skill",
+                Kind.name == skill_name,
+                Kind.is_active == True,  # noqa: E712
+            )
+            .first()
         )
 
     def _find_skill_by_ref(
@@ -1148,14 +1187,90 @@ class TaskRequestBuilder:
         Returns:
             Skill Kind object or None if not found
         """
-        return find_skill_by_ref(
-            self.db,
-            skill_name=skill_name,
-            namespace=namespace,
-            is_public=is_public,
-            user_id=user_id,
-            team_namespace=team_namespace,
-        )
+        if is_public:
+            # Public skill (user_id=0)
+            return (
+                self.db.query(Kind)
+                .filter(
+                    Kind.user_id == 0,
+                    Kind.kind == "Skill",
+                    Kind.name == skill_name,
+                    Kind.is_active == True,  # noqa: E712
+                )
+                .first()
+            )
+        else:
+            # 1. Current user's skill in specified namespace
+            skill = (
+                self.db.query(Kind)
+                .filter(
+                    Kind.user_id == user_id,
+                    Kind.kind == "Skill",
+                    Kind.name == skill_name,
+                    Kind.namespace == namespace,
+                    Kind.is_active == True,  # noqa: E712
+                )
+                .first()
+            )
+            if skill:
+                return skill
+
+            # 2. Group-level skill (any user's skill in the namespace)
+            # This allows team members to use skills uploaded by other members
+            if namespace != "default":
+                skill = (
+                    self.db.query(Kind)
+                    .filter(
+                        Kind.kind == "Skill",
+                        Kind.name == skill_name,
+                        Kind.namespace == namespace,
+                        Kind.is_active == True,  # noqa: E712
+                    )
+                    .first()
+                )
+                if skill:
+                    return skill
+
+            # 3. Team namespace skill (if different from specified namespace)
+            # This handles the case where preload_skills only contains name
+            # without namespace, but the skill exists in the team's namespace
+            if (
+                team_namespace
+                and team_namespace != "default"
+                and team_namespace != namespace
+            ):
+                skill = (
+                    self.db.query(Kind)
+                    .filter(
+                        Kind.kind == "Skill",
+                        Kind.name == skill_name,
+                        Kind.namespace == team_namespace,
+                        Kind.is_active == True,  # noqa: E712
+                    )
+                    .first()
+                )
+                if skill:
+                    logger.info(
+                        "[_find_skill_by_ref] Found skill '%s' in team namespace '%s'",
+                        skill_name,
+                        team_namespace,
+                    )
+                    return skill
+
+            # 4. Fallback to current user's skill in default namespace
+            if namespace != "default":
+                return (
+                    self.db.query(Kind)
+                    .filter(
+                        Kind.user_id == user_id,
+                        Kind.kind == "Skill",
+                        Kind.name == skill_name,
+                        Kind.namespace == "default",
+                        Kind.is_active == True,  # noqa: E712
+                    )
+                    .first()
+                )
+            return None
 
     @staticmethod
     def _build_request_task_data(user: User | None) -> dict[str, Any] | None:
@@ -1648,7 +1763,6 @@ Response template:
         For ClaudeCode shell type, this method:
         1. Extracts skill MCP servers and merges into bot mcp_servers
         2. Normalizes types (streamable-http -> http) for Claude Code SDK
-        3. Filters out unreachable servers to prevent SDK initialization timeout
 
         Modifies bot_config in-place.
 
@@ -1673,7 +1787,7 @@ Response template:
         # Step 2: Normalize types (streamable-http -> http)
         self._normalize_mcp_types_for_claude_code(mcp_list)
 
-        # Step 3: Filter out unreachable servers
+        # Step 3: Filter out obviously invalid MCP configs without probing network.
         bot_config["mcp_servers"] = self._filter_reachable_mcp_servers(mcp_list)
         if not bot_config["mcp_servers"]:
             logger.warning("[MCP-CLAUDE] All MCP servers unreachable, removed")
@@ -1754,22 +1868,10 @@ Response template:
 
     @staticmethod
     def _check_mcp_server_reachable(server: dict) -> bool:
-        """Check if an MCP server URL is reachable with a short timeout.
-
-        Sends a GET request (not HEAD, as some servers like SSE endpoints
-        don't support HEAD method and will timeout). Any HTTP response
-        (including 4xx/5xx) means the server is reachable. Only connection
-        failures are treated as unreachable.
-
-        Args:
-            server: Server config dict with 'url' and optional 'headers'
-
-        Returns:
-            True if server responded or is stdio type, False on connection failure
-        """
+        """Check if an MCP server config is usable without probing the network."""
         server_type = server.get("type", "").lower()
 
-        # Skip reachability check for stdio servers (they run locally via command)
+        # Stdio servers run locally via command, so they don't need a URL.
         if server_type == "stdio":
             return True
 
@@ -1781,44 +1883,14 @@ Response template:
         if "${{" in url and "}}" in url:
             return True
 
-        # URLs pointing to our own backend are always reachable.
-        # Checking them with a synchronous HTTP request would deadlock
-        # (single-worker uvicorn can't serve the request while blocked).
+        # URLs pointing to our own backend are always considered valid here.
         if "${{backend_url}}" in url:
             return True
 
-        try:
-            # Use GET instead of HEAD because some servers (especially SSE endpoints)
-            # don't support HEAD method and will timeout
-            req = urllib.request.Request(url, method="GET")
-            # Add headers, skipping unresolved placeholders
-            headers = server.get("headers", server.get("auth", {}))
-            if isinstance(headers, dict):
-                for k, v in headers.items():
-                    if isinstance(v, str) and not v.startswith("${{"):
-                        req.add_header(k, v)
-            urllib.request.urlopen(req, timeout=5)
-            return True
-        except urllib.error.HTTPError:
-            # Any HTTP response (including 4xx/5xx) means the server is reachable
-            return True
-        except Exception as e:
-            logger.warning(
-                "[MCP-CHECK] Failed to check server reachability: url=%s, error=%s",
-                url,
-                str(e),
-            )
-            return False
+        return True
 
     def _filter_reachable_mcp_servers(self, mcp_servers: list) -> list:
-        """Filter out unreachable MCP servers.
-
-        Args:
-            mcp_servers: List of MCP server config dicts
-
-        Returns:
-            List containing only reachable MCP servers
-        """
+        """Filter out obviously invalid MCP server configs."""
         if not mcp_servers:
             return mcp_servers
 
@@ -1829,7 +1901,6 @@ Response template:
             name = server.get("name", "?")
             if self._check_mcp_server_reachable(server):
                 reachable.append(server)
-                logger.info("[MCP-CHECK] '%s' is reachable", name)
             else:
                 unreachable_names.append(name)
                 logger.warning(
