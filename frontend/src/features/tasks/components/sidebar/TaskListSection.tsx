@@ -413,14 +413,13 @@ export default function TaskListSection({
       case 'CANCELLED':
         return <StopCircle className="w-4 h-4 text-gray-400" />
       case 'RUNNING':
+      case 'PENDING':
         return (
           <RotateCw
             className="w-4 h-4 text-blue-500 animate-spin"
             style={{ animationDuration: '2s' }}
           />
         )
-      case 'PENDING':
-        return <PauseCircle className="w-4 h-4 text-yellow-500" />
       default:
         return <PauseCircle className="w-4 h-4 text-gray-400" />
     }
@@ -438,7 +437,7 @@ export default function TaskListSection({
     // Handle negative time difference (client time earlier than server time)
     // or very small positive differences (< 1 minute)
     if (diffMs < MINUTE_MS) {
-      return '0m'
+      return '1m'
     } else if (diffMs < HOUR_MS) {
       return `${Math.floor(diffMs / MINUTE_MS)}m`
     } else if (diffMs < DAY_MS) {

@@ -441,6 +441,8 @@ export function ChatInputControls({
   const selectorsDisabled = isLoading || isStreaming
   const showClarificationAction = isChatShell(selectedTeam)
   const showCorrectionAction = isChatShell(selectedTeam) && Boolean(onCorrectionModeToggle)
+  const showProjectSelector =
+    !hideSelectors && (taskType === 'chat' || taskType === 'task') && (!hasMessages || !!projectId)
 
   // Desktop layout
   return (
@@ -595,8 +597,10 @@ export function ChatInputControls({
               skillSelectorRef={skillSelectorRef}
             />
 
-            {/* Project Selector - show when in project context */}
-            {projectId && <ProjectSelectorTab projectId={projectId} disabled={hasMessages} />}
+            {/* Project selector for project-backed chats and new chat project entry. */}
+            {showProjectSelector && (
+              <ProjectSelectorTab projectId={projectId} disabled={hasMessages} />
+            )}
 
             {/* Repository and Branch Unified Selector - show when repository selector is enabled */}
             {/* Always show when showRepositorySelector is true, let component handle the display */}

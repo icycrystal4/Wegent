@@ -4,37 +4,45 @@
 
 'use client'
 
-import { FolderOpen, ChevronDown } from 'lucide-react'
+import { ChevronDown, FolderOpen, FolderX } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useProjectContext } from '../contexts/projectContext'
 import { useChatStreamContext } from '@/features/tasks/contexts/chatStreamContext'
 import { useTaskContext } from '@/features/tasks/contexts/taskContext'
-import type { ProjectWithTasks, Task } from '@/types/api'
+import type { ProjectWithTasks } from '@/types/api'
+import { useTranslation } from '@/hooks/useTranslation'
+import { paths } from '@/config/paths'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown'
+import { saveLastWorkspaceProjectId } from '../utils/projectSelection'
 
 interface ProjectSelectorTabProps {
-  projectId: number
+  projectId?: number | null
   disabled?: boolean
 }
 
 export function ProjectSelectorTab({ projectId, disabled }: ProjectSelectorTabProps) {
   const router = useRouter()
-  const { projects } = useProjectContext()
+  const { t } = useTranslation('projects')
+  const { projects, setSelectedProjectTaskId } = useProjectContext()
   const { clearAllStreams } = useChatStreamContext()
   const { setSelectedTask } = useTaskContext()
 
   const currentProject = projects.find(p => p.id === projectId)
   const workspaceProjects = projects.filter(p => p.config?.mode === 'workspace')
+  const displayName = currentProject?.name ?? t('workspace.enterProjectWork')
 
   const handleSwitchProject = (project: ProjectWithTasks) => {
     if (project.id === projectId) return
     clearAllStreams()
-    setSelectedTask(null as unknown as Task)
+    setSelectedTask(null)
+    setSelectedProjectTaskId(null)
+    saveLastWorkspaceProjectId(project.id)
     const params = new URLSearchParams()
     params.set('projectId', String(project.id))
     const deviceId = project.config?.execution?.deviceId
@@ -44,7 +52,14 @@ export function ProjectSelectorTab({ projectId, disabled }: ProjectSelectorTabPr
     router.push(`/devices/chat?${params.toString()}`)
   }
 
-  if (!currentProject) return null
+  const handleUseNoProject = () => {
+    clearAllStreams()
+    setSelectedTask(null)
+    setSelectedProjectTaskId(null)
+    const params = new URLSearchParams()
+    params.set('projectMode', 'none')
+    router.push(`${paths.chat.getHref()}?${params.toString()}`)
+  }
 
   if (disabled) {
     return (
@@ -53,7 +68,7 @@ export function ProjectSelectorTab({ projectId, disabled }: ProjectSelectorTabPr
         className="flex items-center gap-1 min-w-0 rounded-[24px] pl-2.5 pr-3 py-2.5 h-9 bg-transparent text-text-primary opacity-80 cursor-not-allowed"
       >
         <FolderOpen className="w-4 h-4 flex-shrink-0" />
-        <span className="max-w-[120px] truncate text-xs min-w-0">{currentProject.name}</span>
+        <span className="max-w-[120px] truncate text-xs min-w-0">{displayName}</span>
       </div>
     )
   }
@@ -65,7 +80,7 @@ export function ProjectSelectorTab({ projectId, disabled }: ProjectSelectorTabPr
         className="flex items-center gap-1 min-w-0 rounded-[24px] pl-2.5 pr-3 py-2.5 h-9 bg-transparent text-text-primary hover:bg-hover transition-colors focus:outline-none focus:ring-0"
       >
         <FolderOpen className="w-4 h-4 flex-shrink-0" />
-        <span className="max-w-[120px] truncate text-xs min-w-0">{currentProject.name}</span>
+        <span className="max-w-[120px] truncate text-xs min-w-0">{displayName}</span>
         <ChevronDown className="w-2.5 h-2.5 flex-shrink-0 opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-[160px]">
@@ -79,6 +94,18 @@ export function ProjectSelectorTab({ projectId, disabled }: ProjectSelectorTabPr
             <span className="truncate">{project.name}</span>
           </DropdownMenuItem>
         ))}
+        {currentProject && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={handleUseNoProject}
+              data-testid="project-selector-no-project"
+            >
+              <FolderX className="w-3.5 h-3.5 mr-2 text-text-muted" />
+              <span className="truncate">{t('workspace.noProject')}</span>
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

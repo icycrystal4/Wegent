@@ -596,6 +596,7 @@
   },
   "tasks": {
     "history_title": "History",
+    "chats_title": "Chats",
     "group_chats": "Group Chats",
     "group_chats_expand": "Show {{count}}{{suffix}} more",
     "group_chats_collapse": "Show less",
@@ -606,6 +607,10 @@
     "search_placeholder_with_shortcut": "Search conversations... ({{shortcut}} to toggle)",
     "new_task": "New Task",
     "new_conversation": "New Conversation",
+    "more_actions": "More actions",
+    "archive_all": "Archive All",
+    "archive_all_success": "Archived {{count}} chats",
+    "archive_all_failed": "Failed to archive chats",
     "no_tasks": "No tasks",
     "no_group_chats": "No group chats",
     "unknown_agent": "Unknown agent",

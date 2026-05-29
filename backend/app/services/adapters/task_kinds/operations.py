@@ -721,6 +721,7 @@ class TaskOperationsMixin:
                 TaskResource.user_id == user_id,
                 TaskResource.kind == "Task",
                 TaskResource.namespace != "system",
+                TaskResource.project_id == 0,
                 TaskResource.is_active == TaskResource.STATE_ACTIVE,
             )
             .all()

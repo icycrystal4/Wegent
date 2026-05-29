@@ -18,6 +18,7 @@
   },
   "actions": {
     "edit": "编辑",
+    "archiveChats": "归档所有会话",
     "delete": "删除"
   },
   "create": {
@@ -49,6 +50,8 @@
     "selectDirectoryHint": "请从所选设备中选择项目所在目录",
     "projectNamePreview": "项目名称：{{name}}",
     "newConversation": "新建对话",
+    "noProject": "不使用项目",
+    "enterProjectWork": "进入项目工作",
     "greeting": "要在{{name}}中构建什么？",
     "pathLabel": "项目目录",
     "switchProject": "切换项目",
@@ -114,6 +117,8 @@
     "addTaskFailed": "添加对话失败",
     "removeTaskSuccess": "对话已从分组移除",
     "removeTaskFailed": "移除对话失败",
+    "archiveChatsSuccess": "已归档 {{count}} 个项目会话",
+    "archiveChatsFailed": "归档项目会话失败",
     "groupChatNotSupported": "对话分组功能暂时不支持群聊加入",
     "taskImportPathlessOnly": "普通任务只能导入到不带路径的项目"
   },

@@ -188,15 +188,25 @@ def test_archive_all_and_project_archive_only_archive_chat_like_tasks(
     assert project_task.is_active == TaskResource.STATE_ARCHIVED
     assert standalone_chat.is_active == TaskResource.STATE_ACTIVE
 
+    remaining_project_task = _create_task(
+        test_db,
+        test_user.id,
+        7006,
+        "Remaining project chat",
+        project_id=project.id,
+    )
+
     all_count = task_kinds_service.archive_all_user_chats(
         test_db,
         user_id=test_user.id,
     )
     test_db.refresh(standalone_chat)
     test_db.refresh(subscription_task)
+    test_db.refresh(remaining_project_task)
 
     assert all_count == 1
     assert standalone_chat.is_active == TaskResource.STATE_ARCHIVED
+    assert remaining_project_task.is_active == TaskResource.STATE_ACTIVE
     assert subscription_task.is_active == TaskResource.STATE_ACTIVE
 
 

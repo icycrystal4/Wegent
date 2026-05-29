@@ -51,6 +51,11 @@ export interface TaskListResponse {
   items: Task[]
 }
 
+export interface TaskArchiveBatchResponse {
+  message: string
+  count: number
+}
+
 // Diff related types
 export interface BranchDiffRequest {
   git_repo: string
@@ -340,6 +345,10 @@ export const taskApis = {
 
   deleteTask: async (id: number): Promise<SuccessMessage> => {
     return apiClient.delete(`/tasks/${id}`)
+  },
+
+  archiveAllChats: async (): Promise<TaskArchiveBatchResponse> => {
+    return apiClient.post('/tasks/archive')
   },
 
   // Cancel a running task

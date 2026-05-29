@@ -57,6 +57,10 @@ import { useModelSelection } from '../../hooks/useModelSelection'
 import { QueueMessageHandler } from '@/features/inbox'
 import type { ChatAreaExtension } from './types'
 import { useProjectContext } from '@/features/projects/contexts/projectContext'
+import {
+  getLastWorkspaceProjectId,
+  saveLastWorkspaceProjectId,
+} from '@/features/projects/utils/projectSelection'
 
 /**
  * Threshold in pixels for determining when to collapse selectors.
@@ -347,6 +351,7 @@ function ChatAreaContent({
   const teamIdFromUrl = searchParams.get('teamId')
   // Get project info when in project context
   const projectIdFromUrl = searchParams.get('projectId')
+  const projectModeFromUrl = searchParams.get('projectMode')
   const { projects } = useProjectContext()
   const activeProject = useMemo(() => {
     if (!projectIdFromUrl) return null
@@ -359,6 +364,44 @@ function ChatAreaContent({
       path: explicitPath || defaultPath,
     }
   }, [projectIdFromUrl, projects])
+
+  useEffect(() => {
+    if (projectIdFromUrl) {
+      saveLastWorkspaceProjectId(Number(projectIdFromUrl))
+      return
+    }
+
+    if (
+      taskIdFromUrl ||
+      projectModeFromUrl === 'none' ||
+      hasMessagesForHooks ||
+      (taskType !== 'chat' && taskType !== 'task')
+    ) {
+      return
+    }
+
+    const lastProjectId = getLastWorkspaceProjectId(projects)
+    if (!lastProjectId) return
+
+    const project = projects.find(item => item.id === lastProjectId)
+    if (!project) return
+
+    const params = new URLSearchParams()
+    params.set('projectId', String(project.id))
+    const deviceId = project.config?.execution?.deviceId
+    if (deviceId) {
+      params.set('deviceId', deviceId)
+    }
+    router.replace(`/devices/chat?${params.toString()}`)
+  }, [
+    hasMessagesForHooks,
+    projectIdFromUrl,
+    projectModeFromUrl,
+    projects,
+    router,
+    taskIdFromUrl,
+    taskType,
+  ])
 
   // Track initialization and last synced task for team selection
   const hasInitializedTeamRef = useRef(false)

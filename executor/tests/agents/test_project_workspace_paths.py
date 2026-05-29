@@ -87,3 +87,25 @@ def test_project_workspace_sets_session_root_outside_workspace(tmp_path):
 
     set_session_root.assert_called_once_with(1001, str(executor_home / "sessions"))
     assert ".wegent" not in agent.project_path
+
+
+def test_standalone_chat_workspace_sets_cwd(tmp_path):
+    request = ExecutionRequest(
+        task_id=1002,
+        subtask_id=2002,
+        prompt="Build chat archive",
+    )
+    agent = ClaudeCodeAgent.__new__(ClaudeCodeAgent)
+    agent.task_data = request
+    agent.task_id = request.task_id
+    agent.options = {}
+    agent.project_path = None
+
+    with patch(
+        "executor.agents.claude_code.claude_code_agent.config.get_chats_workspace_root",
+        return_value=str(tmp_path / "chats"),
+    ):
+        agent._prepare_chat_workspace()
+
+    assert agent.options["cwd"].endswith("build-chat-archive")
+    assert agent.project_path == agent.options["cwd"]

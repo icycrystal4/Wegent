@@ -113,6 +113,12 @@ LOCAL_WORKSPACE_ROOT = os.environ.get(
     "LOCAL_WORKSPACE_ROOT", os.path.join(WEGENT_EXECUTOR_HOME, "workspace")
 )
 
+WECODE_HOME = os.environ.get("WECODE_HOME", os.path.expanduser("~/.wecode"))
+WEGENT_EXECUTOR_CHATS_DIR = os.environ.get(
+    "WEGENT_EXECUTOR_CHATS_DIR",
+    os.path.join(WECODE_HOME, "wegent-executor", "workspace", "chats"),
+)
+
 
 def get_workspace_root() -> str:
     """Get the workspace root directory based on executor mode.
@@ -124,6 +130,12 @@ def get_workspace_root() -> str:
     if EXECUTOR_MODE == "local":
         return LOCAL_WORKSPACE_ROOT
     return WORKSPACE_ROOT
+
+
+def get_chats_workspace_root() -> str:
+    """Get the root directory for non-project chat workspaces."""
+
+    return WEGENT_EXECUTOR_CHATS_DIR
 
 
 # Local mode logging configuration

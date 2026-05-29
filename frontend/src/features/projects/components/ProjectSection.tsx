@@ -7,6 +7,7 @@
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  Archive,
   ChevronDown,
   ChevronUp,
   ChevronRight,
@@ -16,6 +17,7 @@ import {
   Trash2,
   FolderOpen,
   Folder,
+  RotateCw,
   SquarePen,
 } from 'lucide-react'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -40,12 +42,15 @@ import { useChatStreamContext } from '@/features/tasks/contexts/chatStreamContex
 import { useTaskContext } from '@/features/tasks/contexts/taskContext'
 import { TaskInlineRename } from '@/components/common/TaskInlineRename'
 import { taskApis } from '@/apis/tasks'
+import { projectApis } from '@/apis/projects'
+import { toast } from 'sonner'
 import {
   canImportOrdinaryTaskToProject,
   canStartProjectConversation,
   isPathlessProject,
   isWorkspaceProject,
 } from '../utils/projectClassification'
+import { saveLastWorkspaceProjectId } from '../utils/projectSelection'
 
 interface ProjectSectionProps {
   onTaskSelect?: () => void
@@ -63,6 +68,7 @@ export function ProjectSection({ onTaskSelect, variant = 'all' }: ProjectSection
     selectedProjectTaskId,
     setSelectedProjectTaskId,
     refreshProjects,
+    expandProject,
   } = useProjectContext()
   const { clearAllStreams } = useChatStreamContext()
   const { setSelectedTask } = useTaskContext()
@@ -74,7 +80,9 @@ export function ProjectSection({ onTaskSelect, variant = 'all' }: ProjectSection
     (project: ProjectWithTasks) => {
       clearAllStreams()
       setSelectedProjectTaskId(null)
-      setSelectedTask(null as unknown as Task)
+      setSelectedTask(null)
+      expandProject(project.id)
+      saveLastWorkspaceProjectId(project.id)
 
       const params = new URLSearchParams()
       params.set('projectId', String(project.id))
@@ -85,7 +93,14 @@ export function ProjectSection({ onTaskSelect, variant = 'all' }: ProjectSection
       router.push(`/devices/chat?${params.toString()}`)
       onTaskSelect?.()
     },
-    [clearAllStreams, setSelectedProjectTaskId, setSelectedTask, router, onTaskSelect]
+    [
+      clearAllStreams,
+      setSelectedProjectTaskId,
+      setSelectedTask,
+      expandProject,
+      router,
+      onTaskSelect,
+    ]
   )
   const visibleProjects = projects.filter(project => {
     if (isWorkspaceSection) {
@@ -118,6 +133,20 @@ export function ProjectSection({ onTaskSelect, variant = 'all' }: ProjectSection
     setSelectedProject(project)
     setDeleteDialogOpen(true)
   }
+
+  const handleArchiveProjectChats = useCallback(
+    async (project: ProjectWithTasks) => {
+      try {
+        const response = await projectApis.archiveChats(project.id)
+        await refreshProjects()
+        toast.success(t('toast.archiveChatsSuccess', { count: response.count }))
+      } catch (err) {
+        console.error('[ProjectSection] Failed to archive project chats:', err)
+        toast.error(t('toast.archiveChatsFailed'))
+      }
+    },
+    [refreshProjects, t]
+  )
 
   // Handle task click - navigate to the task
   const handleTaskClick = (projectTask: ProjectTask, project: ProjectWithTasks) => {
@@ -220,6 +249,9 @@ export function ProjectSection({ onTaskSelect, variant = 'all' }: ProjectSection
                   selectedProjectTaskId={selectedProjectTaskId}
                   onRefreshProjects={refreshProjects}
                   isWorkspace={isWorkspaceProject(project)}
+                  onArchiveChats={
+                    isWorkspaceProject(project) ? handleArchiveProjectChats : undefined
+                  }
                   onNewConversation={
                     canStartProjectConversation(project) ? handleNewConversation : undefined
                   }
@@ -260,6 +292,7 @@ interface ProjectItemProps {
   selectedProjectTaskId: number | null
   onRefreshProjects: () => Promise<void>
   isWorkspace?: boolean
+  onArchiveChats?: (project: ProjectWithTasks) => void
   onNewConversation?: (project: ProjectWithTasks) => void
 }
 
@@ -273,10 +306,12 @@ function ProjectItem({
   selectedProjectTaskId,
   onRefreshProjects,
   isWorkspace,
+  onArchiveChats,
   onNewConversation,
 }: ProjectItemProps) {
   const { t } = useTranslation('projects')
   const taskCount = project.tasks?.length || 0
+  const hasRunningTask = project.tasks?.some(isExecutingProjectTask) || false
 
   // Track which task is being renamed
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null)
@@ -324,7 +359,17 @@ function ProjectItem({
           className="flex items-center justify-center w-5 h-5"
           style={{ color: project.color || 'var(--color-text-secondary)' }}
         >
-          {isExpanded ? <FolderOpen className="w-4 h-4" /> : <Folder className="w-4 h-4" />}
+          {!isExpanded && hasRunningTask ? (
+            <RotateCw
+              className="w-4 h-4 animate-spin"
+              style={{ animationDuration: '2s' }}
+              data-testid="project-running-indicator"
+            />
+          ) : isExpanded ? (
+            <FolderOpen className="w-4 h-4" />
+          ) : (
+            <Folder className="w-4 h-4" />
+          )}
         </div>
 
         {/* Project Name */}
@@ -339,15 +384,25 @@ function ProjectItem({
               variant="ghost"
               size="sm"
               className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-text-muted hover:text-text-primary"
+              data-testid="project-actions-menu-button"
             >
               <MoreHorizontal className="w-3.5 h-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-32">
+          <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem onClick={onEdit}>
               <Pencil className="w-3.5 h-3.5 mr-2" />
               {t('actions.edit')}
             </DropdownMenuItem>
+            {onArchiveChats && (
+              <DropdownMenuItem
+                onClick={() => onArchiveChats(project)}
+                data-testid="project-archive-chats-menu-item"
+              >
+                <Archive className="w-3.5 h-3.5 mr-2" />
+                {t('actions.archiveChats')}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={onDelete} className="text-destructive">
               <Trash2 className="w-3.5 h-3.5 mr-2" />
               {t('actions.delete')}
@@ -418,6 +473,13 @@ function ProjectItem({
                       {projectTask.task_title || `Task #${projectTask.task_id}`}
                     </span>
                   )}
+                  {isExecutingProjectTask(projectTask) && !isEditing && (
+                    <RotateCw
+                      className="w-3.5 h-3.5 flex-shrink-0 text-primary animate-spin"
+                      style={{ animationDuration: '2s' }}
+                      data-testid="project-task-running-indicator"
+                    />
+                  )}
                   <div className="opacity-0 group-hover/task:opacity-100 transition-opacity">
                     <ProjectTaskMenu
                       taskId={projectTask.task_id}
@@ -441,4 +503,8 @@ function ProjectItem({
       )}
     </div>
   )
+}
+
+function isExecutingProjectTask(projectTask: ProjectTask): boolean {
+  return ['PENDING', 'RUNNING', 'CANCELLING'].includes(projectTask.task_status)
 }

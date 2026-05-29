@@ -18,6 +18,7 @@
   },
   "actions": {
     "edit": "Edit",
+    "archiveChats": "Archive All Chats",
     "delete": "Delete"
   },
   "create": {
@@ -49,6 +50,8 @@
     "selectDirectoryHint": "Select the project directory from the chosen device",
     "projectNamePreview": "Project name: {{name}}",
     "newConversation": "New Conversation",
+    "noProject": "Do Not Use Project",
+    "enterProjectWork": "Enter Project Work",
     "greeting": "What do you want to build in {{name}}?",
     "pathLabel": "Project directory",
     "switchProject": "Switch Project",
@@ -114,6 +117,8 @@
     "addTaskFailed": "Failed to add task",
     "removeTaskSuccess": "Task removed from project",
     "removeTaskFailed": "Failed to remove task",
+    "archiveChatsSuccess": "Archived {{count}} project chats",
+    "archiveChatsFailed": "Failed to archive project chats",
     "groupChatNotSupported": "Group chats cannot be added to chat groups",
     "taskImportPathlessOnly": "Ordinary tasks can only be imported into pathless projects"
   },

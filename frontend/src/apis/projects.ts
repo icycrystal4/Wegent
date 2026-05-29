@@ -11,6 +11,7 @@ import {
   ProjectWithTasks,
   SuccessMessage,
 } from '../types/api'
+import type { TaskArchiveBatchResponse } from './tasks'
 
 // Project Request Types
 export interface CreateProjectRequest {
@@ -131,5 +132,9 @@ export const projectApis = {
     data: CreateProjectConversationRequest
   ): Promise<CreateProjectConversationResponse> => {
     return apiClient.post(`/projects/${projectId}/conversations`, data)
+  },
+
+  archiveChats: async (projectId: number): Promise<TaskArchiveBatchResponse> => {
+    return apiClient.post(`/projects/${projectId}/archive-chats`)
   },
 }

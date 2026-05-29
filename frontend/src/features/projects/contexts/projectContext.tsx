@@ -31,6 +31,7 @@ interface ProjectContextValue {
 
   // UI state
   toggleProjectExpanded: (projectId: number) => void
+  expandProject: (projectId: number) => void
   expandedProjects: Set<number>
 
   // Highlight control - track which task is selected in project section
@@ -99,13 +100,15 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       setProjects(response.items)
 
       // Initialize expanded state from server
-      const expanded = new Set<number>()
-      response.items.forEach(project => {
-        if (project.is_expanded) {
-          expanded.add(project.id)
-        }
+      setExpandedProjects(prev => {
+        const expanded = new Set<number>()
+        response.items.forEach(project => {
+          if (project.is_expanded || prev.has(project.id)) {
+            expanded.add(project.id)
+          }
+        })
+        return expanded
       })
-      setExpandedProjects(expanded)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load projects'
       setError(message)
@@ -299,6 +302,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   // Toggle project expanded state
   const toggleProjectExpanded = useCallback(
     (projectId: number) => {
+      const shouldExpand = !expandedProjects.has(projectId)
       setExpandedProjects(prev => {
         const next = new Set(prev)
         if (next.has(projectId)) {
@@ -310,19 +314,33 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       })
 
       // Persist to server
-      const project = projects.find(p => p.id === projectId)
-      if (project) {
-        projectApis
-          .updateProject(projectId, {
-            is_expanded: !project.is_expanded,
-          })
-          .catch(err => {
-            console.error('[ProjectContext] Failed to persist expanded state:', err)
-          })
-      }
+      projectApis
+        .updateProject(projectId, {
+          is_expanded: shouldExpand,
+        })
+        .catch(err => {
+          console.error('[ProjectContext] Failed to persist expanded state:', err)
+        })
     },
-    [projects]
+    [expandedProjects]
   )
+
+  const expandProject = useCallback((projectId: number) => {
+    setExpandedProjects(prev => {
+      if (prev.has(projectId)) return prev
+      const next = new Set(prev)
+      next.add(projectId)
+      return next
+    })
+
+    projectApis
+      .updateProject(projectId, {
+        is_expanded: true,
+      })
+      .catch(err => {
+        console.error('[ProjectContext] Failed to persist expanded state:', err)
+      })
+  }, [])
 
   // Load projects on mount
   useEffect(() => {
@@ -340,6 +358,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     addTaskToProject,
     removeTaskFromProject,
     toggleProjectExpanded,
+    expandProject,
     expandedProjects,
     selectedProjectTaskId,
     setSelectedProjectTaskId,

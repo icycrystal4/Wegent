@@ -59,6 +59,7 @@ from executor.agents.claude_code.skill_deployer import (
 )
 from executor.config import config
 from executor.hooks.pre_execute_hook import get_pre_execute_hook
+from executor.services.chat_workspace import resolve_chat_workspace
 from executor.services.task_identity import build_task_identity_context
 from executor.tasks.resource_manager import ResourceManager
 from executor.tasks.task_state_manager import TaskState, TaskStateManager
@@ -425,6 +426,7 @@ class ClaudeCodeAgent(Agent):
         """
         try:
             self._prepare_project_workspace()
+            self._prepare_chat_workspace()
             git_url = self.task_data.git_url
             # Download code if git_url is provided
             if git_url and git_url != "":
@@ -534,6 +536,31 @@ class ClaudeCodeAgent(Agent):
         )
         logger.info(
             "Using project workspace path for task %s: %s", self.task_id, project_path
+        )
+
+    def _prepare_chat_workspace(self) -> None:
+        """Resolve standalone chat workspace paths before Claude Code starts."""
+
+        if self.options.get("cwd"):
+            return
+        if getattr(self.task_data, "project_id", None):
+            return
+        if getattr(self.task_data, "workspace_source", None):
+            return
+        if getattr(self.task_data, "project_workspace_path", None):
+            return
+        if self.task_data.git_url:
+            return
+
+        chat_path = resolve_chat_workspace(
+            task_id=self.task_id,
+            prompt=self.task_data.prompt,
+            chats_root=config.get_chats_workspace_root(),
+        )
+        self.project_path = chat_path
+        self.options["cwd"] = chat_path
+        logger.info(
+            "Using standalone chat workspace for task %s: %s", self.task_id, chat_path
         )
 
     def execute(self) -> TaskStatus:

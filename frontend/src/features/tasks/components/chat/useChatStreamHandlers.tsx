@@ -265,7 +265,7 @@ export function useChatStreamHandlers({
 
   // Get selected device ID for executor-based tasks
   const { selectedDeviceId } = useDevices()
-  const { projects, refreshProjects } = useProjectContext()
+  const { projects, refreshProjects, expandProject, setSelectedProjectTaskId } = useProjectContext()
 
   // Project context - for workspace project conversations
   const projectId = searchParams?.get('projectId')
@@ -744,6 +744,8 @@ export function useChatStreamHandlers({
             }
             refreshTasks()
             if (projectId) {
+              expandProject(projectId)
+              setSelectedProjectTaskId(completedTaskId)
               refreshProjects()
             }
           }
@@ -792,6 +794,8 @@ export function useChatStreamHandlers({
       refreshTasks,
       projectId,
       refreshProjects,
+      expandProject,
+      setSelectedProjectTaskId,
       markTaskAsViewed,
       handleSendError,
     ]
@@ -1426,6 +1430,8 @@ export function useChatStreamHandlers({
                 router.push(`?${params.toString()}`)
                 refreshTasks()
                 if (projectId) {
+                  expandProject(projectId)
+                  setSelectedProjectTaskId(completedTaskId)
                   refreshProjects()
                 }
               }
@@ -1489,6 +1495,8 @@ export function useChatStreamHandlers({
       effectiveRequiresWorkspace,
       projectId,
       refreshProjects,
+      expandProject,
+      setSelectedProjectTaskId,
     ]
   )
 
