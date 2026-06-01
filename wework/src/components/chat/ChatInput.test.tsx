@@ -28,12 +28,14 @@ function projectChatControls(overrides: Partial<ProjectChatControls> = {}): Proj
     models: [],
     skills: [],
     selectedModel: null,
+    selectedModelOptions: {},
     selectedSkills: [],
     attachments: [],
     uploadingFiles: new Map(),
     errors: new Map(),
     isOptionsLocked: false,
     setSelectedModel: vi.fn(),
+    setSelectedModelOption: vi.fn(),
     toggleSkill: vi.fn(),
     handleFileSelect: vi.fn().mockResolvedValue(undefined),
     removeAttachment: vi.fn().mockResolvedValue(undefined),
@@ -244,9 +246,17 @@ describe('ChatInput', () => {
 
   test('opens the desktop model menu with real model options', async () => {
     const model: UnifiedModel = {
-      name: 'gpt-5.5-medium',
+      name: 'overseas-gpt-5.5',
       type: 'user',
-      displayName: 'GPT 5.5 Medium',
+      displayName: '海外:gpt-5.5',
+      config: {
+        ui: {
+          family: 'gpt',
+          region: 'overseas',
+          modelLabel: 'gpt-5.5',
+          sortOrder: 10,
+        },
+      },
     }
     const setSelectedModel = vi.fn()
     render(
@@ -266,11 +276,12 @@ describe('ChatInput', () => {
     await userEvent.click(screen.getByTestId('model-selector-button'))
 
     expect(screen.getByTestId('model-selector-menu')).toBeInTheDocument()
-    expect(screen.getByText('选择模型')).toBeInTheDocument()
+    expect(screen.getByTestId('model-family-gpt')).toBeInTheDocument()
+    expect(screen.getByTestId('model-control-reasoning-high')).toBeInTheDocument()
     expect(screen.queryByTestId('model-option-default')).not.toBeInTheDocument()
-    expect(screen.getByText('GPT 5.5 Medium')).toBeInTheDocument()
+    expect(screen.getByText('海外:gpt-5.5 High')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByTestId('model-option-gpt-5.5-medium'))
+    await userEvent.click(screen.getByTestId('model-option-overseas-gpt-5.5'))
 
     expect(setSelectedModel).toHaveBeenCalledWith(model)
   })

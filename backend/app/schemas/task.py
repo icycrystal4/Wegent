@@ -91,6 +91,7 @@ class TaskCreate(BaseModel):
     force_override_bot_model_type: Optional[str] = (
         None  # Model type: 'public', 'user', 'group'
     )
+    model_options: Optional[dict[str, str]] = None
     # API key name field
     api_key_name: Optional[str] = None  # API key name used for this request
 

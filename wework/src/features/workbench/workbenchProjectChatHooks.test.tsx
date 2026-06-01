@@ -21,6 +21,7 @@ describe('workbench project chat hooks', () => {
 
     act(() => result.current.setSelectedModel(model))
     expect(result.current.selectedModel).toEqual(model)
+    expect(result.current.selectedModelOptions).toEqual({})
 
     rerender({ locked: true })
     act(() => result.current.setSelectedModel(null))
@@ -28,16 +29,17 @@ describe('workbench project chat hooks', () => {
     expect(result.current.selectedModel).toEqual(model)
   })
 
-  test('keeps only models whose name includes claude', async () => {
+  test('keeps supported coding model families', async () => {
     const claudeModel: UnifiedModel = { name: 'wecode-claude-sonnet-4-5', type: 'public' }
     const gptModel: UnifiedModel = { name: 'wecode-gpt-4.1', type: 'public' }
+    const unknownModel: UnifiedModel = { name: 'unknown-model', type: 'public' }
     const api = {
-      listModels: vi.fn().mockResolvedValue({ data: [claudeModel, gptModel] }),
+      listModels: vi.fn().mockResolvedValue({ data: [claudeModel, gptModel, unknownModel] }),
     }
 
     const { result } = renderHook(() => useWorkbenchModels({ api, locked: false }))
 
-    await waitFor(() => expect(result.current.models).toEqual([claudeModel]))
+    await waitFor(() => expect(result.current.models).toEqual([claudeModel, gptModel]))
   })
 
   test('loads skills and ignores skill changes when locked', async () => {

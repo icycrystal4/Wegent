@@ -706,6 +706,10 @@ describe('WorkbenchProvider', () => {
           message: 'build it',
           force_override_bot_model: 'gpt-5.5-medium',
           force_override_bot_model_type: 'user',
+          model_options: {
+            reasoning: 'high',
+            speed: 'standard',
+          },
           attachment_ids: [42],
           additional_skills: [
             {

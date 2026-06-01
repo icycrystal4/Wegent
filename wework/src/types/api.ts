@@ -229,6 +229,7 @@ export interface ChatSendPayload {
   model_id?: string
   force_override_bot_model?: string
   force_override_bot_model_type?: string
+  model_options?: ModelOptions
   attachment_ids?: number[]
   additional_skills?: SkillRef[]
 }
@@ -569,6 +570,8 @@ export interface ChatBlockUpdatedPayload {
 }
 
 export type ModelType = 'public' | 'user' | 'group'
+
+export type ModelOptions = Record<string, string>
 
 export interface UnifiedModel {
   name: string

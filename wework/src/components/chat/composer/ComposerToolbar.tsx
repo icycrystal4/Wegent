@@ -1,6 +1,6 @@
 import { ArrowUp, Mic } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { SkillRef, UnifiedModel, UnifiedSkill } from '@/types/api'
+import type { ModelOptions, SkillRef, UnifiedModel, UnifiedSkill } from '@/types/api'
 import { AddContextMenu } from './AddContextMenu'
 import { ModelSelector } from './ModelSelector'
 import { SkillSelector } from './SkillSelector'
@@ -10,9 +10,11 @@ interface ComposerToolbarProps {
   models: UnifiedModel[]
   skills: UnifiedSkill[]
   selectedModel: UnifiedModel | null
+  selectedModelOptions: ModelOptions
   selectedSkills: SkillRef[]
   optionsLocked: boolean
   onSelectModel: (model: UnifiedModel | null) => void
+  onSelectModelOption: (optionId: string, value: string) => void
   onToggleSkill: (skill: SkillRef) => void
   onFileSelect: (files: File | File[]) => void
 }
@@ -22,9 +24,11 @@ export function ComposerToolbar({
   models,
   skills,
   selectedModel,
+  selectedModelOptions,
   selectedSkills,
   optionsLocked,
   onSelectModel,
+  onSelectModelOption,
   onToggleSkill,
   onFileSelect,
 }: ComposerToolbarProps) {
@@ -45,8 +49,10 @@ export function ComposerToolbar({
         <ModelSelector
           models={models}
           selectedModel={selectedModel}
+          selectedModelOptions={selectedModelOptions}
           disabled={optionsLocked}
           onSelectModel={onSelectModel}
+          onSelectModelOption={onSelectModelOption}
         />
         <button
           type="button"

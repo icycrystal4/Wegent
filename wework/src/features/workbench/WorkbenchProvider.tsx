@@ -19,6 +19,7 @@ import type {
   ChatSendPayload,
   CreateProjectRequest,
   DeviceInfo,
+  ModelOptions,
   ProjectWithTasks,
   SkillRef,
   Subtask,
@@ -59,6 +60,7 @@ export interface WorkbenchContextValue {
     models: UnifiedModel[]
     skills: UnifiedSkill[]
     selectedModel: UnifiedModel | null
+    selectedModelOptions: ModelOptions
     selectedSkills: SkillRef[]
     attachments: Attachment[]
     uploadingFiles: Map<string, { file: File; progress: number }>
@@ -66,6 +68,7 @@ export interface WorkbenchContextValue {
     isOptionsLocked: boolean
     isAttachmentReadyToSend: boolean
     setSelectedModel: (model: UnifiedModel | null) => void
+    setSelectedModelOption: (optionId: string, value: string) => void
     setSelectedSkills: (skills: SkillRef[]) => void
     toggleSkill: (skill: SkillRef) => void
     handleFileSelect: (files: File | File[]) => Promise<void>
@@ -754,6 +757,9 @@ export function WorkbenchProvider({
     if (!isOptionsLocked && modelSelection.selectedModel) {
       payload.force_override_bot_model = modelSelection.selectedModel.name
       payload.force_override_bot_model_type = modelSelection.selectedModel.type
+      if (Object.keys(modelSelection.selectedModelOptions).length > 0) {
+        payload.model_options = modelSelection.selectedModelOptions
+      }
     }
 
     if (!isOptionsLocked && skillSelection.selectedSkills.length > 0) {
@@ -804,6 +810,7 @@ export function WorkbenchProvider({
     refreshWorkLists,
     isOptionsLocked,
     modelSelection.selectedModel,
+    modelSelection.selectedModelOptions,
     resolvedServices,
     skillSelection.selectedSkills,
     state.currentProject,
@@ -838,6 +845,7 @@ export function WorkbenchProvider({
       models: modelSelection.models,
       skills: skillSelection.skills,
       selectedModel: modelSelection.selectedModel,
+      selectedModelOptions: modelSelection.selectedModelOptions,
       selectedSkills: skillSelection.selectedSkills,
       attachments: attachmentSelection.attachments,
       uploadingFiles: attachmentSelection.uploadingFiles,
@@ -845,6 +853,7 @@ export function WorkbenchProvider({
       isOptionsLocked,
       isAttachmentReadyToSend: attachmentSelection.isAttachmentReadyToSend,
       setSelectedModel: modelSelection.setSelectedModel,
+      setSelectedModelOption: modelSelection.setSelectedModelOption,
       setSelectedSkills: skillSelection.setSelectedSkills,
       toggleSkill: skillSelection.toggleSkill,
       handleFileSelect: attachmentSelection.handleFileSelect,

@@ -84,8 +84,10 @@ export function MobileWorkbenchLayout({
   const effectiveProjectChat = projectChat ?? {
     models: [],
     selectedModel: null,
+    selectedModelOptions: {},
     isOptionsLocked: false,
     setSelectedModel: () => {},
+    setSelectedModelOption: () => {},
   }
   const emptyTitle = state.currentProject
     ? t('workbench.project_empty_title', {
@@ -133,11 +135,13 @@ export function MobileWorkbenchLayout({
                 <ModelSelector
                   models={effectiveProjectChat.models}
                   selectedModel={effectiveProjectChat.selectedModel}
+                  selectedModelOptions={effectiveProjectChat.selectedModelOptions}
                   disabled={effectiveProjectChat.isOptionsLocked}
                   onSelectModel={effectiveProjectChat.setSelectedModel}
+                  onSelectModelOption={effectiveProjectChat.setSelectedModelOption}
                   menuPlacement="below"
                   buttonClassName="max-w-[min(14rem,calc(100vw-6rem))] bg-surface px-3"
-                  menuClassName="left-0 right-auto w-[min(18rem,calc(100vw-2rem))]"
+                  menuClassName="left-0 right-auto w-[min(34rem,calc(100vw-2rem))]"
                 />
               </div>
               <div className="h-10 min-w-[44px]" />
@@ -187,11 +191,13 @@ export function MobileWorkbenchLayout({
                 <ModelSelector
                   models={effectiveProjectChat.models}
                   selectedModel={effectiveProjectChat.selectedModel}
+                  selectedModelOptions={effectiveProjectChat.selectedModelOptions}
                   disabled={effectiveProjectChat.isOptionsLocked}
                   onSelectModel={effectiveProjectChat.setSelectedModel}
+                  onSelectModelOption={effectiveProjectChat.setSelectedModelOption}
                   menuPlacement="below"
                   buttonClassName="max-w-[min(14rem,calc(100vw-6rem))] bg-surface px-3"
-                  menuClassName="left-0 right-auto w-[min(18rem,calc(100vw-2rem))]"
+                  menuClassName="left-0 right-auto w-[min(34rem,calc(100vw-2rem))]"
                 />
               </div>
               <div className="h-10 min-w-[44px]" />
